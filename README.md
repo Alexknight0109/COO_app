@@ -1,316 +1,177 @@
-This system is **NOT COO-only**.
-It is for **EVERYONE in ALMED** → office staff, factory, site team, accounts, service, sales, managers, AND COO.
+# ALMED AHU — Pi Zero 2W Eco Display
 
-Everyone gets:
+A Python/Pygame touch UI for the **Raspberry Pi Zero 2W** that exactly mirrors the ESP32
+`eco_display.ino` behaviour.  It connects to the same local MQTT broker (`10.42.0.1`),
+auto-discovers every AHU device, and lets you monitor and control Temperature / Humidity
+with the same four-screen flow.
 
-* Their own dashboard
-* Their own tasks & calendar
-* Their own reports
-* Their own chat/messages
-* Their own notifications
-* Their own permissions
-* Their own workflow
-
-**COO only gets extra admin controls** — but everyone uses the SAME software.
----
-
-# 🚀 **FINAL UNIVERSAL PROMPT (FOR ENTIRE COMPANY — NOT COO-ONLY)**
-
-### (Copy–Paste Directly. Nothing is missed. Fully compressed but complete.)
-
-You are a **Senior Full-Stack Architect + UI/UX Designer**.
-Build a complete internal operating system called **ALMED OPS CONTROL SYSTEM** for EVERYONE in the company — NOT just the COO.
-
-This system must support **office staff, managers, site engineers, factory workers, accounts, service teams, sales, storekeepers, HR, and COO**.
-
-It must be **extremely user-friendly, drag-and-drop based, notification-rich, mobile-friendly**, and include **dark + light themes**.
+> **No changes required on the ESP32 AHU firmware.**
 
 ---
 
-# 🎨 **1. THEME SYSTEM (HIGH PRIORITY)**
+## Hardware
 
-### **Dark Mode (Primary – like screenshot)**
+| Part | Notes |
+|------|-------|
+| Raspberry Pi Zero 2W | Any OS with Python 3.10+ |
+| HDMI display (3.5" – 7") | 480×320 or larger recommended |
+| USB / GPIO touchscreen | tslib or evdev supported |
+| microSD 8 GB+ | Class 10 |
+| 5 V / 2.5 A USB supply | Pi Zero needs clean power |
 
-* Deep navy (#0D0F21) background
-* Cards (#13152B)
-* Sidebar (#111324)
-* Purple→Blue gradient accents
-* Rounded corners (12–16px)
-* Soft glow hover
-* Minimal icons
-
-### **Light Mode (Secondary)**
-
-* Background #F8F9FE
-* White cards w/ light shadow
-* Dark charcoal text
-* Same gradients
-* Smooth transition
-
-### **Theme Toggle**
-
-* Top-right
-* Saves preference in user account
-* Built using CSS variables
+The Pi Zero 2W acts as:
+- **WiFi hotspot** (`PiSpot`, 10.42.0.1)
+- **MQTT broker** (Mosquitto)
+- **Display controller** (this app)
 
 ---
 
-# 🧩 **2. SYSTEM-WIDE FEATURES (FOR ALL EMPLOYEES)**
+## File Structure
 
-Every employee gets:
-
-### ✔ **Personal Dashboard**
-
-Tasks, messages, calendar, quick stats, assigned work, deadlines.
-
-### ✔ **Internal Messaging (DM + Groups)**
-
-* One-to-one chat
-* Team chats (Factory, Site, Office, etc.)
-* File sharing
-* Voice notes (optional)
-* Read receipts
-* Typing indicators
-
-### ✔ **Broadcast Announcements**
-
-COO/managers can send messages to:
-
-* All employees
-* Only site team
-* Only factory
-* Only accounts
-* Only managers
-
-Employees see alerts instantly on their dashboard.
-
-### ✔ **Task Management System (Drag & Drop)**
-
-* Status flow: **Not Started → Working → Blocked → Reviewing → Completed**
-* Priority tags
-* Start time, end time, auto time tracking
-* Attach files
-* Add comments
-* Tag teammates
-* Auto notifications
-* Subtasks
-* Task templates (Quotation, Site Report, Purchase Follow-up etc.)
-
-### ✔ **Task Assignment Flexibility**
-
-* COO & managers can assign tasks to anyone
-* Employees can assign tasks to themselves
-* Task can be linked to:
-
-  * Project
-  * Site
-  * Department
-  * Complaint
-  * Inventory
-  * Factory production
-
-### ✔ **Personal Calendar**
-
-* Tasks synced
-* Work planning
-* Employee can add own schedule
-* Managers/COO can view team calendars
-* Drag & drop scheduling
-
-### ✔ **Reports Upload**
-
-* Daily report
-* Work summary
-* Document uploads (PDF/images)
-* Quotation uploads
-* Site photos
-
-### ✔ **Notification System**
-
-* Real-time alerts
-* Task updates
-* New messages
-* Broadcasts
-* New assignments
-* Calendar reminders
-* Deadline alerts
+```
+pi_eco_display/
+├── main.py              ← App entry point (run this)
+├── config.py            ← All credentials and tunable constants
+├── mqtt_client.py       ← Thread-safe MQTT service
+├── ui.py                ← Pygame drawing helpers
+├── screen_scan.py       ← Screen 1 – Scanning
+├── screen_select.py     ← Screen 2 – Device Select
+├── screen_control.py    ← Screen 3 – Control
+├── screen_keypad.py     ← Screen 4 – Passcode Keypad
+├── requirements.txt
+├── pi-eco-display.service  ← systemd unit
+└── install.sh           ← One-shot installer
+```
 
 ---
 
-# 🧱 **3. MAIN MODULES (FOR ENTIRE COMPANY)**
+## Quick Start
 
-The software must include the following modules — each with full access based on permissions:
+### 1. Clone the repo on the Pi
 
-### **1. Dashboard (Universal)**
+```bash
+mkdir -p ~/Documents && cd ~/Documents
+git clone https://github.com/<your-repo>/almed_ahu.git
+```
 
-* Personal metrics
-* Company announcements
-* Assigned tasks
-* Team updates
+### 2. Run the installer
 
-### **2. Messaging System** *(core)*
+```bash
+cd ~/Documents/almed_ahu/pi_eco_display
+chmod +x install.sh
+./install.sh
+```
 
-* DM
-* Team groups
-* Voice notes
-* File sharing
-* Broadcast messaging
+The installer will:
+1. Install system packages (Pygame SDL2, Mosquitto)
+2. Create a Python virtual environment and install dependencies
+3. Configure Mosquitto with MQTT user `almed` / `Almed1234$`
+4. Set up the `PiSpot` WiFi hotspot (SSID: `PiSpot`, pass: `12345678`)
+5. Install and enable the `pi-eco-display` systemd service
+6. Disable screen blanking
 
-### **3. Task Management (Universal)**
+### 3. Reboot
 
-* Drag & drop Kanban
-* Task timer
-* Filters (by site, by priority, by department)
-* Approvals needed
-* Logged time per task
+```bash
+sudo reboot
+```
 
-### **4. Calendar (Universal)**
-
-* Employee calendar
-* Team calendar
-* Company calendar
-* Meeting scheduling
-
-### **5. Projects & Sites**
-
-* PO info
-* Site status
-* Linked tasks
-* Site team list
-* Daily logs
-* Installation pipeline
-
-### **6. Daily Site Log System**
-
-* Work done
-* Materials needed
-* Photos
-* Issues
-* Auto-sync to COO + managers
-
-### **7. Installation Pipeline**
-
-* Stage-by-stage flow
-* Status updates
-* Photos
-* Blockers
-
-### **8. Complaints / Service Tickets**
-
-* Assign engineer
-* Track resolution
-* Spare parts
-* Photos
-* Customer signature upload
-
-### **9. Factory / Production Control**
-
-* AHU serial tracking
-* Work stages
-* QC
-* Dispatch readiness
-
-### **10. Inventory / Store**
-
-* Stock levels
-* Stock in/out
-* Auto low stock alerts
-* Material issue to site
-
-### **11. Accounts & Payments**
-
-* PO value
-* Payment stages
-* Outstanding balance
-* Follow-up notes
-
-### **12. HR / Employees**
-
-* Profiles
-* Roles
-* Permissions
-* Workload view
-* Performance tags
-
-### **13. Reports Module**
-
-* Daily reports
-* Factory logs
-* Sales reports
-* Download/export
-
-### **14. Settings**
-
-* Roles
-* Permission matrix
-* Themes
-* Notifications
-* Departments
+The display app starts automatically on boot.
 
 ---
 
-# 🔐 **4. ROLES & PERMISSIONS (FULL COMPANY)**
+## Configuration (`config.py`)
 
-All roles use the same software. Only access differs.
-
-* **COO (Super Admin)** – full access
-* **Directors/Management** – team visibility
-* **Factory Manager** – production, tasks, messaging
-* **Site Engineer/Manager** – sites, logs, tasks
-* **Office Staff** – tasks, messages, calendar
-* **Accounts** – payments, invoices
-* **Storekeeper** – inventory
-* **Sales/Marketing** – leads, tasks
-* **Service Team** – complaints, tasks
-* **General Staff** – personal tasks, calendar, messaging
-
-Permissions operate via **Role-Based Access Control (RBAC)**.
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `MQTT_BROKER` | `10.42.0.1` | Mosquitto IP (Pi hotspot gateway) |
+| `MQTT_USER` | `almed` | MQTT username |
+| `MQTT_PASS` | `Almed1234$` | MQTT password |
+| `SCREEN_W` / `SCREEN_H` | `480` / `320` | Display resolution |
+| `FULLSCREEN` | `True` | Set `False` for desktop testing |
+| `DEFAULT_PASSCODE` | `123123` | Initial 6-digit lock code |
 
 ---
 
-# ⚙ **5. TECH STACK & SYSTEM ARCHITECTURE**
+## Screens
 
-### Frontend:
+### 1 — Scanning
+Shown for 5 s at startup. A progress bar fills while retained messages arrive.  
+Any tap skips straight to the device list.
 
-* **Next.js / React**
-* **Tailwind** (theme engine + components)
+### 2 — Device Select
+Lists every discovered AHU unit. Tap a row to open its control screen.  
+The previously active device is marked `ACTIVE`. Scroll arrows appear when > 4 devices exist.
 
-### Backend:
+### 3 — Control
+```
+┌─ < Back          AHU_ESP2           OPEN ─┐
+│  TEMPERATURE                              │
+│   24.3 °C                                 │
+│   SET: 22.0 °C              [−]  [+]      │
+├───────────────────────────────────────────┤
+│  HUMIDITY                                 │
+│   61.5 %                                  │
+│   SET: 55.0 %               [−]  [+]      │
+├───────────────────────────────────────────┤
+│  AHU: RUNNING                Tap to toggle│
+└───────────────────────────────────────────┘
+```
+- Tap **−** / **+** to adjust setpoint (MQTT command sent immediately)
+- Tap the bottom bar to toggle start / stop
+- Tap **LOCK / OPEN** (top-right) to lock or open the passcode keypad
+- Tap **< Back** to return to device list
 
-* **Node.js / NestJS**
-* **PostgreSQL**
-* **WebSockets** (real-time chat + notifications)
-
-### Core requirements:
-
-* JWT Authentication
-* Role-based authorization
-* Real-time updates
-* File upload (PDF, images)
-* Mobile responsive
-* Desktop notifications
-* Theme engine using CSS variables
+### 4 — Passcode Keypad
+6-dot indicator shows progress. Tap digits, **←** to backspace, **✓** to confirm.  
+Wrong passcode flashes red. Tap outside the pad to cancel.
 
 ---
 
-# 🧾 **6. DELIVERABLES YOU MUST GENERATE**
+## Lock Behaviour
 
-1. Full UI layout (dark + light)
-2. Theme variables
-3. All page designs
-4. All core components (cards, chat UI, Kanban, tables, calendar)
-5. Database schema for ALL modules
-6. API endpoints
-7. Workflow diagrams for:
+| State | What is blocked |
+|-------|----------------|
+| Locked | All setpoint changes and toggle; viewing always allowed |
+| Unlocked | Full control |
 
-   * Task assignment
-   * Employee self-tasks
-   * Messaging + broadcast
-   * Site logging
-   * Installation stage updates
-   * Complaint resolution
+Lock state is saved to `.lockstate` and survives reboots.  
+Passcode is saved to `.passcode`. Default: `123123`.
 
+---
 
+## Manual / Development Run
 
+```bash
+cd ~/Documents/almed_ahu/pi_eco_display
 
-Just tell me **"give DB schema"**, **"give API design"**, **"give UI code"**, or **"give Figma layout"**.
+# Windowed (for desktop testing)
+./venv/bin/python3 main.py --window
+
+# Fullscreen
+./venv/bin/python3 main.py --fs
+```
+
+---
+
+## MQTT Topics Used
+
+| Direction | Topic | Payload |
+|-----------|-------|---------|
+| Subscribe | `almed/ahu/#` | Wildcard – catches status, state, telemetry |
+| Publish | `almed/ahu/{site}/{room}/{ahu}/cmd` | `{"setpoint": 22.5}` |
+| Publish | `almed/ahu/{site}/{room}/{ahu}/cmd` | `{"humset": 55.0}` |
+| Publish | `almed/ahu/{site}/{room}/{ahu}/cmd` | `{"toggle": true}` |
+| Publish (LWT) | `almed/eco_display/status` | `online` / `offline` |
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| Black screen | Check `DISPLAY=:0` in the service file; verify Pygame SDL2 is installed |
+| Touch not working | Set `SDL_MOUSEDRV=TSLIB` and `SDL_MOUSEDEV=/dev/input/touchscreen` in the service |
+| No devices found | Confirm ESP32 AHU is connected to `PiSpot` and Mosquitto is running: `sudo systemctl status mosquitto` |
+| Wrong colours | Swap `C_BG` / `C_TEXT` in `config.py` |
+| Service not starting | Check: `journalctl -u pi-eco-display -f` |

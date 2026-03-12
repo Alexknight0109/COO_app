@@ -1,0 +1,29 @@
+[Unit]
+Description=ALMED AHU Eco Display (Pi Zero 2W)
+After=network-online.target graphical.target
+Wants=network-online.target
+
+[Service]
+User=almed
+Group=almed
+WorkingDirectory=/home/almed/Documents/almed_ahu/pi_eco_display
+
+# Ensure a display is available (uses the logged-in Wayland/X11 session)
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/almed/.Xauthority
+# For raw framebuffer (no desktop):
+# Environment=SDL_VIDEODRIVER=fbdev
+# Environment=SDL_FBDEV=/dev/fb0
+
+ExecStart=/home/almed/Documents/almed_ahu/pi_eco_display/venv/bin/python3 \
+          /home/almed/Documents/almed_ahu/pi_eco_display/main.py --fs
+
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pi-eco-display
+
+[Install]
+WantedBy=graphical.target
