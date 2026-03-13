@@ -173,11 +173,11 @@ class App:
         from ui import draw_text, FontCache
         self._surf.fill(config.C_BG)
         W, H = config.SCREEN_W, config.SCREEN_H
-        draw_text(self._surf, "ALMED", FontCache.get(48), config.C_PRIMARY,
-                  (W // 2, H // 2 - 30), anchor="center")
-        draw_text(self._surf, "AHU Eco Display  v2.0", FontCache.get(14), config.C_DIM,
-                  (W // 2, H // 2 + 20), anchor="center")
-        draw_text(self._surf, "Connecting…", FontCache.get(14), config.C_DIM,
+        draw_text(self._surf, "ALMED", FontCache.bold(48), config.C_PRIMARY,
+                  (W // 2, H // 2 - 28), anchor="center")
+        draw_text(self._surf, "AHU Eco Display", FontCache.get(15), config.C_DIM,
+                  (W // 2, H // 2 + 22), anchor="center")
+        draw_text(self._surf, "Connecting…", FontCache.get(13), config.C_DIM,
                   (W // 2, H // 2 + 44), anchor="center")
         pygame.display.flip()
 
