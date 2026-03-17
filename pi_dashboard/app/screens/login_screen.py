@@ -47,7 +47,12 @@ class LoginScreen(ctk.CTkFrame):
         canvas = ctk.CTkCanvas(self, highlightthickness=0)
         canvas.place(x=0, y=0, relwidth=1, relheight=1)
         # Ensure the background doesn't intercept clicks/hover events.
-        canvas.lower()
+        # Note: CTkCanvas.lower() is the *canvas item* API (needs tagOrId),
+        # so lowering the widget must use the Tk window stacking command.
+        try:
+            canvas.tk.call("lower", canvas._w)
+        except Exception:
+            pass
         self.bind("<Configure>", lambda e: self._draw_gradient(canvas, is_dark))
         self._draw_gradient(canvas, is_dark)
 
