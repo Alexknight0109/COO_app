@@ -21,6 +21,10 @@ class MqttService:
     DEFAULT_PASS = "Almed1234$"
     WILDCARD_TOPIC = "almed/ahu/#"
 
+    # Connection fallbacks (important on Pi if mDNS isn't ready yet).
+    # ESP32 uses almed-ahu.local; the dashboard should still work locally via localhost.
+    DEFAULT_HOST_FALLBACKS = ("almed-ahu.local", "localhost", "127.0.0.1")
+
     def __init__(self):
         self._queue: queue.Queue = queue.Queue()
         self._client: Optional[mqtt.Client] = None
@@ -47,10 +51,13 @@ class MqttService:
         self.disconnect()
         self._host = host
         self._port = port
+        # If caller passes default host, try a small ordered fallback list.
+        # If caller passes a specific host (e.g., from Admin screen), use only that.
+        hosts = [host] if host and host != self.DEFAULT_HOST else list(self.DEFAULT_HOST_FALLBACKS)
         self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._run_loop,
-            args=(host, port, user, password),
+            args=(hosts, port, user, password),
             daemon=True,
             name="mqtt-loop",
         )
@@ -96,7 +103,7 @@ class MqttService:
 
     # ── internal ──────────────────────────────────────────────────────────────
 
-    def _run_loop(self, host, port, user, password):
+    def _run_loop(self, hosts, port, user, password):
         # Support paho-mqtt 1.x and 2.x
         if hasattr(mqtt, "CallbackAPIVersion"):
             client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -108,18 +115,23 @@ class MqttService:
         client.on_disconnect = self._cb_disconnect
         client.on_message    = self._cb_message
 
+        backoff = 1.0
         while not self._stop_event.is_set():
-            try:
-                client.connect(host, port, keepalive=60)
-                self._client = client
-                client.loop_start()
-                break
-            except Exception:
-                time.sleep(5)
+            for host in hosts:
+                if self._stop_event.is_set():
+                    break
+                try:
+                    client.connect(host, port, keepalive=60)
+                    self._client = client
+                    client.loop_start()
+                    return
+                except Exception:
+                    continue
+            # No host worked; wait and retry.
+            time.sleep(backoff)
+            backoff = min(5.0, backoff + 1.0)
 
-        while not self._stop_event.is_set():
-            time.sleep(1)
-
+        # stop requested
         try:
             client.loop_stop()
             client.disconnect()

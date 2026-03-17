@@ -157,6 +157,12 @@ class PasscodeDialog(ctk.CTkToplevel):
                       hover_color=T("surface2"),
                       command=self._cancel).pack(pady=(4, 16))
 
+        # Allow keyboard Enter to submit
+        try:
+            self.bind("<Return>", lambda _e: self._verify())
+        except Exception:
+            pass
+
     def _on_digit(self, d: str):
         if d == "CONFIRM":
             self._verify()
@@ -164,6 +170,9 @@ class PasscodeDialog(ctk.CTkToplevel):
         if len(self._code) < self.LENGTH:
             self._code += d
             self._update_dots()
+            # Auto-submit once all digits entered
+            if len(self._code) == self.LENGTH:
+                self.after(150, self._verify)
 
     def _on_clear(self):
         self._code = self._code[:-1]
