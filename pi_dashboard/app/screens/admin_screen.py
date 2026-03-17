@@ -242,7 +242,17 @@ class AdminScreen(ctk.CTkFrame):
         dlg.geometry("380x90")
         dlg.resizable(False, False)
         dlg.configure(fg_color=T("surface"))
-        dlg.grab_set()
+        try:
+            dlg.transient(self.winfo_toplevel())
+        except Exception:
+            pass
+        try:
+            dlg.lift()
+            dlg.attributes("-topmost", True)
+            dlg.after(350, lambda: dlg.attributes("-topmost", False))
+        except Exception:
+            pass
+        dlg.after(0, lambda: _safe_grab(dlg))
         root = self.winfo_toplevel()
         px = root.winfo_rootx() + root.winfo_width()  // 2 - 190
         py = root.winfo_rooty() + root.winfo_height() - 120
@@ -260,3 +270,12 @@ class AdminScreen(ctk.CTkFrame):
         except Exception:
             import sys
             sys.exit(0)
+
+
+def _safe_grab(win):
+    try:
+        win.update_idletasks()
+        win.wait_visibility()
+        win.grab_set()
+    except Exception:
+        pass

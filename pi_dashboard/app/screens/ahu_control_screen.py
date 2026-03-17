@@ -462,7 +462,18 @@ class AhuControlScreen(ctk.CTkFrame):
         dlg.geometry("380x200")
         dlg.resizable(False, False)
         dlg.configure(fg_color=T("surface"))
-        dlg.grab_set()
+        try:
+            dlg.transient(self.winfo_toplevel())
+        except Exception:
+            pass
+        try:
+            dlg.lift()
+            dlg.attributes("-topmost", True)
+            dlg.after(350, lambda: dlg.attributes("-topmost", False))
+            dlg.focus_force()
+        except Exception:
+            pass
+        dlg.after(0, lambda: _safe_grab(dlg))
         ctk.CTkLabel(dlg, text="Reset ESP32?",
                      font=font(18, "bold"), text_color=T("text")).pack(pady=(32, 8))
         ctk.CTkLabel(dlg, text="This will restart the device firmware.",
@@ -481,6 +492,15 @@ class AhuControlScreen(ctk.CTkFrame):
                       command=lambda: [
                           self._provider.reset_esp32(self._key), dlg.destroy()
                       ]).pack(side="left", padx=8)
+
+
+def _safe_grab(win):
+    try:
+        win.update_idletasks()
+        win.wait_visibility()
+        win.grab_set()
+    except Exception:
+        pass
 
 
 # ── AHU info bar (top-bar embed) ──────────────────────────────────────────────

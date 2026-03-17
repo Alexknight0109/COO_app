@@ -46,6 +46,8 @@ class LoginScreen(ctk.CTkFrame):
         # gradient background via canvas
         canvas = ctk.CTkCanvas(self, highlightthickness=0)
         canvas.place(x=0, y=0, relwidth=1, relheight=1)
+        # Ensure the background doesn't intercept clicks/hover events.
+        canvas.lower()
         self.bind("<Configure>", lambda e: self._draw_gradient(canvas, is_dark))
         self._draw_gradient(canvas, is_dark)
 
@@ -139,17 +141,6 @@ class LoginScreen(ctk.CTkFrame):
                             border_width=1, border_color=bg_to)
         card.grid(row=0, column=col, padx=6, sticky="nsew")
 
-        btn = ctk.CTkButton(
-            card,
-            text="",
-            fg_color="transparent",
-            hover_color=bg_to,
-            height=170,
-            corner_radius=18,
-            command=command,
-        )
-        btn.place(x=0, y=0, relwidth=1, relheight=1)
-
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(expand=True, fill="both", padx=14, pady=18)
 
@@ -167,6 +158,29 @@ class LoginScreen(ctk.CTkFrame):
         ctk.CTkLabel(inner, text=subtitle, font=font(11),
                      text_color="#E5E7EB",
                      justify="center").pack()
+
+        # Make entire card reliably clickable (and hoverable) on Pi:
+        # some window managers + background canvas can interfere with CTkButton overlays.
+        def on_enter(_=None):
+            card.configure(fg_color=bg_to)
+
+        def on_leave(_=None):
+            card.configure(fg_color=bg_from)
+
+        def on_click(_=None):
+            command()
+
+        self._bind_recursive(card, "<Enter>", on_enter)
+        self._bind_recursive(card, "<Leave>", on_leave)
+        self._bind_recursive(card, "<Button-1>", on_click)
+
+    def _bind_recursive(self, widget, sequence: str, func):
+        try:
+            widget.bind(sequence, func)
+        except Exception:
+            pass
+        for child in widget.winfo_children():
+            self._bind_recursive(child, sequence, func)
 
     def _admin_login(self):
         PasscodeDialog(

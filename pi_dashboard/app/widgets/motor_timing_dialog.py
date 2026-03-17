@@ -32,8 +32,19 @@ class MotorTimingDialog(ctk.CTkToplevel):
         self.geometry("560x620")
         self.resizable(False, False)
         self.configure(fg_color=T("surface"))
-        self.grab_set()
+        try:
+            self.transient(parent)
+        except Exception:
+            pass
+        try:
+            self.lift()
+            self.attributes("-topmost", True)
+            self.after(350, lambda: self.attributes("-topmost", False))
+            self.focus_force()
+        except Exception:
+            pass
         self._center(parent)
+        self.after(0, self._safe_grab)
 
         # Load initial values
         state = provider.state.get(ahu_key)
@@ -46,6 +57,14 @@ class MotorTimingDialog(ctk.CTkToplevel):
         }
         self._var_labels: dict = {}
         self._build()
+
+    def _safe_grab(self):
+        try:
+            self.update_idletasks()
+            self.wait_visibility()
+            self.grab_set()
+        except Exception:
+            pass
 
     def _center(self, parent):
         self.update_idletasks()

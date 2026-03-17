@@ -90,7 +90,6 @@ class PasscodeDialog(ctk.CTkToplevel):
             self.transient(parent)
         except Exception:
             pass
-        self.grab_set()
         try:
             self.lift()
             self.attributes("-topmost", True)
@@ -100,6 +99,17 @@ class PasscodeDialog(ctk.CTkToplevel):
             pass
         self._center(parent)
         self._build()
+        # On some Pi window managers a Toplevel isn't "viewable" immediately.
+        # Calling grab_set() too early raises: TclError: grab failed: window not viewable
+        self.after(0, self._safe_grab)
+
+    def _safe_grab(self):
+        try:
+            self.update_idletasks()
+            self.wait_visibility()
+            self.grab_set()
+        except Exception:
+            pass
 
     def _center(self, parent):
         self.update_idletasks()
@@ -203,7 +213,6 @@ class ScreenUnlockDialog(ctk.CTkToplevel):
             self.transient(parent)
         except Exception:
             pass
-        self.grab_set()
         try:
             self.lift()
             self.attributes("-topmost", True)
@@ -213,6 +222,15 @@ class ScreenUnlockDialog(ctk.CTkToplevel):
             pass
         self._center(parent)
         self._build()
+        self.after(0, self._safe_grab)
+
+    def _safe_grab(self):
+        try:
+            self.update_idletasks()
+            self.wait_visibility()
+            self.grab_set()
+        except Exception:
+            pass
 
     def _center(self, parent):
         self.update_idletasks()
@@ -315,7 +333,6 @@ class ChangePasscodeDialog(ctk.CTkToplevel):
             self.transient(parent)
         except Exception:
             pass
-        self.grab_set()
         try:
             self.lift()
             self.attributes("-topmost", True)
@@ -325,6 +342,15 @@ class ChangePasscodeDialog(ctk.CTkToplevel):
             pass
         self._center(parent)
         self._build()
+        self.after(0, self._safe_grab)
+
+    def _safe_grab(self):
+        try:
+            self.update_idletasks()
+            self.wait_visibility()
+            self.grab_set()
+        except Exception:
+            pass
 
     def _center(self, parent):
         self.update_idletasks()

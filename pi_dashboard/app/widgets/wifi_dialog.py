@@ -21,10 +21,29 @@ class WiFiDialog(ctk.CTkToplevel):
         self.geometry("520x560")
         self.resizable(False, False)
         self.configure(fg_color=T("surface"))
-        self.grab_set()
+        try:
+            self.transient(parent)
+        except Exception:
+            pass
+        try:
+            self.lift()
+            self.attributes("-topmost", True)
+            self.after(350, lambda: self.attributes("-topmost", False))
+            self.focus_force()
+        except Exception:
+            pass
         self._center(parent)
         self._build()
         self._scan()
+        self.after(0, self._safe_grab)
+
+    def _safe_grab(self):
+        try:
+            self.update_idletasks()
+            self.wait_visibility()
+            self.grab_set()
+        except Exception:
+            pass
 
     def _center(self, parent):
         self.update_idletasks()
@@ -157,7 +176,18 @@ class WiFiDialog(ctk.CTkToplevel):
         dlg.geometry("400x260")
         dlg.resizable(False, False)
         dlg.configure(fg_color=T("surface"))
-        dlg.grab_set()
+        try:
+            dlg.transient(self)
+        except Exception:
+            pass
+        try:
+            dlg.lift()
+            dlg.attributes("-topmost", True)
+            dlg.after(350, lambda: dlg.attributes("-topmost", False))
+            dlg.focus_force()
+        except Exception:
+            pass
+        dlg.after(0, lambda: _safe_grab(dlg))
 
         ctk.CTkLabel(dlg, text=f"Connect to  "{net.ssid}"",
                      font=font(15, "bold"), text_color=T("text")).pack(pady=(28, 8))
@@ -202,3 +232,12 @@ class WiFiDialog(ctk.CTkToplevel):
                       font=font(13, "bold"), fg_color="#3B82F6",
                       text_color="#FFFFFF", hover_color="#2563EB",
                       command=do_connect).pack(side="left", padx=6)
+
+
+def _safe_grab(win):
+    try:
+        win.update_idletasks()
+        win.wait_visibility()
+        win.grab_set()
+    except Exception:
+        pass
