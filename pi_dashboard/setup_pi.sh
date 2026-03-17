@@ -17,19 +17,16 @@ echo "╚═══════════════════════�
 echo ""
 
 # ── 1. Hostname ───────────────────────────────────────────────────────────────
+# Update /etc/hosts FIRST so sudo can resolve the new hostname (avoids "unable to resolve host")
 echo "→ Setting hostname to '$HOSTNAME' ..."
-sudo hostnamectl set-hostname "$HOSTNAME"
-
-# /etc/hostname
-echo "$HOSTNAME" | sudo tee /etc/hostname > /dev/null
-
-# /etc/hosts – replace existing hostname line
 if grep -q "127\.0\.1\.1" /etc/hosts; then
     sudo sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t$HOSTNAME/" /etc/hosts
 else
     echo "127.0.1.1	$HOSTNAME" | sudo tee -a /etc/hosts > /dev/null
 fi
-echo "   Hostname set. Will take effect after reboot."
+echo "$HOSTNAME" | sudo tee /etc/hostname > /dev/null
+sudo hostnamectl set-hostname "$HOSTNAME"
+echo "   Hostname set. Will take effect fully after reboot."
 echo ""
 
 # ── 2. avahi-daemon (mDNS – makes almed-ahu.local work) ──────────────────────
@@ -56,16 +53,23 @@ CONF
 # Create / overwrite password file for user "almed"
 echo "→ Setting mosquitto credentials (user: almed) ..."
 sudo mosquitto_passwd -b -c /etc/mosquitto/passwd almed 'Almed1234$'
+# mosquitto runs as user 'mosquitto' – must be able to read the password file
+sudo chown root:mosquitto /etc/mosquitto/passwd
+sudo chmod 640 /etc/mosquitto/passwd
 
 sudo systemctl enable mosquitto
 sudo systemctl restart mosquitto
 echo "   Mosquitto running on port 1883."
 echo ""
 
-# ── 4. Python dependencies ────────────────────────────────────────────────────
-echo "→ Installing Python dependencies ..."
-pip3 install --quiet -r "$SCRIPT_DIR/requirements.txt"
-echo "   Python packages installed."
+# ── 4. Python virtual environment (avoids externally-managed-environment) ───────
+echo "→ Creating Python virtual environment ..."
+sudo apt-get install -y -qq python3-venv python3-full
+VENV_DIR="$SCRIPT_DIR/venv"
+python3 -m venv "$VENV_DIR"
+"$VENV_DIR/bin/pip" install --quiet --upgrade pip
+"$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements.txt"
+echo "   Python packages installed in venv."
 echo ""
 
 # ── 5. Autostart (systemd user service) ──────────────────────────────────────
@@ -81,7 +85,7 @@ After=graphical-session.target
 [Service]
 Environment=DISPLAY=:0
 WorkingDirectory=$SCRIPT_DIR
-ExecStart=/usr/bin/python3 $SCRIPT_DIR/main.py
+ExecStart=$VENV_DIR/bin/python $SCRIPT_DIR/main.py
 Restart=on-failure
 RestartSec=5
 
