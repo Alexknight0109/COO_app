@@ -139,8 +139,18 @@ class MqttService:
             pass
 
     def _cb_connect(self, client, userdata, flags, reason_code, *args):
-        # reason_code is an integer (0 = success) in both paho 1.x and 2.x
-        rc = reason_code if isinstance(reason_code, int) else int(str(reason_code))
+        # paho-mqtt 1.x passes an int rc.
+        # paho-mqtt 2.x may pass a ReasonCode object (has `.value`).
+        try:
+            if isinstance(reason_code, int):
+                rc = reason_code
+            elif hasattr(reason_code, "value"):
+                rc = int(reason_code.value)
+            else:
+                rc = int(reason_code)
+        except Exception:
+            rc = 1
+
         if rc == 0:
             self._connected = True
             client.subscribe(self.WILDCARD_TOPIC, qos=1)
