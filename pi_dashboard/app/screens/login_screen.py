@@ -3,6 +3,7 @@ Login screen  –  role selection (Hospital | Admin).
 Admin requires passcode dialog.
 """
 import customtkinter as ctk
+import os
 from app.theme import T, font
 from app.widgets.passcode_dialog import PasscodeDialog
 
@@ -16,6 +17,11 @@ def _mix(hex_a: str, hex_b: str, t: float) -> str:
     g = int(ag * (1 - t) + bg * t)
     b = int(ab * (1 - t) + bb * t)
     return f"#{r:02X}{g:02X}{b:02X}"
+
+
+def _asset_path(*parts: str) -> str:
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.abspath(os.path.join(here, "..", "..", "assets", *parts))
 
 
 class LoginScreen(ctk.CTkFrame):
@@ -64,13 +70,24 @@ class LoginScreen(ctk.CTkFrame):
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(expand=True, fill="both", padx=32, pady=24)
 
-        # logo
-        logo_frame = ctk.CTkFrame(inner, fg_color="#2563EB",
-                                  width=72, height=72, corner_radius=20)
-        logo_frame.pack_propagate(False)
-        logo_frame.pack(pady=(0, 16))
-        ctk.CTkLabel(logo_frame, text="💨", font=font(32)).pack(
-            expand=True, fill="both")
+        # logo (loads real PNGs if present)
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        logo_path = _asset_path("images", "logo_dark.png" if is_dark else "logo_light.png")
+        if os.path.exists(logo_path):
+            try:
+                img = ctk.CTkImage(light_image=None, dark_image=None, size=(120, 120))
+                # CTkImage needs a PIL image object; CustomTkinter accepts path via PIL internally
+                # so we use a label with image loaded by CTkImage from file.
+                from PIL import Image  # Pillow dependency
+                pil = Image.open(logo_path)
+                img = ctk.CTkImage(light_image=pil, dark_image=pil, size=(120, 120))
+                ctk.CTkLabel(inner, text="", image=img).pack(pady=(0, 8))
+                self._logo_img_ref = img  # keep alive
+            except Exception:
+                self._logo_img_ref = None
+                self._fallback_logo(inner)
+        else:
+            self._fallback_logo(inner)
 
         ctk.CTkLabel(inner, text="AHU Control",
                      font=font(30, "bold"), text_color=T("text")).pack()
@@ -106,6 +123,14 @@ class LoginScreen(ctk.CTkFrame):
 
         ctk.CTkLabel(inner, text="v1.0.0",
                      font=font(11), text_color=T("text_sec")).pack(pady=(24, 0))
+
+    def _fallback_logo(self, parent):
+        logo_frame = ctk.CTkFrame(parent, fg_color="#2563EB",
+                                  width=72, height=72, corner_radius=20)
+        logo_frame.pack_propagate(False)
+        logo_frame.pack(pady=(0, 16))
+        ctk.CTkLabel(logo_frame, text="ALMED", font=font(16, "bold"),
+                     text_color="#FFFFFF").pack(expand=True, fill="both")
 
     def _build_role_card(self, parent, col, icon, title, subtitle,
                          bg_from, bg_to, command):

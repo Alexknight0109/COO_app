@@ -31,7 +31,11 @@ class App:
         self._is_pi = _is_raspberry_pi()
         if self._is_pi:
             self.root.attributes("-fullscreen", True)
-            self.root.config(cursor="none")
+            # Cursor should be visible by default.
+            # If you want kiosk-style hidden cursor, launch with:
+            #   HIDE_CURSOR=1 ./venv/bin/python main.py
+            if os.environ.get("HIDE_CURSOR", "").strip() in ("1", "true", "TRUE", "yes", "YES"):
+                self.root.config(cursor="none")
 
         self.provider = AppProvider(self.root)
         self.user_role: str = "hospital"

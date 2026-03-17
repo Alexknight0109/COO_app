@@ -85,7 +85,19 @@ class PasscodeDialog(ctk.CTkToplevel):
         self.geometry("420x520")
         self.resizable(False, False)
         self.configure(fg_color=T("surface"))
+        # Make dialog reliably visible/focused on Raspberry Pi window managers
+        try:
+            self.transient(parent)
+        except Exception:
+            pass
         self.grab_set()
+        try:
+            self.lift()
+            self.attributes("-topmost", True)
+            self.after(350, lambda: self.attributes("-topmost", False))
+            self.focus_force()
+        except Exception:
+            pass
         self._center(parent)
         self._build()
 
@@ -187,7 +199,18 @@ class ScreenUnlockDialog(ctk.CTkToplevel):
         self.geometry("420x540")
         self.resizable(False, False)
         self.configure(fg_color=T("surface"))
+        try:
+            self.transient(parent)
+        except Exception:
+            pass
         self.grab_set()
+        try:
+            self.lift()
+            self.attributes("-topmost", True)
+            self.after(350, lambda: self.attributes("-topmost", False))
+            self.focus_force()
+        except Exception:
+            pass
         self._center(parent)
         self._build()
 
@@ -288,7 +311,18 @@ class ChangePasscodeDialog(ctk.CTkToplevel):
         self.geometry("420x580")
         self.resizable(False, False)
         self.configure(fg_color=T("surface"))
+        try:
+            self.transient(parent)
+        except Exception:
+            pass
         self.grab_set()
+        try:
+            self.lift()
+            self.attributes("-topmost", True)
+            self.after(350, lambda: self.attributes("-topmost", False))
+            self.focus_force()
+        except Exception:
+            pass
         self._center(parent)
         self._build()
 
