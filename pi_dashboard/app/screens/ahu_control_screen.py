@@ -85,13 +85,14 @@ class AhuControlScreen(ctk.CTkFrame):
     def _build(self):
         self._build_topbar()
         ctk.CTkFrame(self, fg_color=T("border"), height=1).pack(fill="x")
-        self._scroll = ctk.CTkScrollableFrame(self, fg_color=T("bg"))
-        self._scroll.pack(fill="both", expand=True)
+        # Fixed single-screen layout for 1024×600 (no scrolling).
+        self._content = ctk.CTkFrame(self, fg_color=T("bg"), corner_radius=0)
+        self._content.pack(fill="both", expand=True)
         self._build_content()
         self._on_update()
 
     def _build_topbar(self):
-        bar = ctk.CTkFrame(self, fg_color=T("topbar"), corner_radius=0, height=58)
+        bar = ctk.CTkFrame(self, fg_color=T("topbar"), corner_radius=0, height=48)
         bar.pack(fill="x")
         bar.pack_propagate(False)
 
@@ -104,9 +105,9 @@ class AhuControlScreen(ctk.CTkFrame):
 
         ctk.CTkLabel(left, text="ALMED",
                      font=("Helvetica", 22, "bold"), text_color="#3B82F6").pack(
-            side="left", pady=12)
+            side="left", pady=8)
         ctk.CTkFrame(left, fg_color=T("border"), width=1).pack(
-            side="left", fill="y", padx=10, pady=10)
+            side="left", fill="y", padx=10, pady=8)
 
         # back button
         ctk.CTkButton(left, text="‹ Back", width=72, height=36,
@@ -125,44 +126,44 @@ class AhuControlScreen(ctk.CTkFrame):
 
         # screen lock button
         self._lock_btn = ctk.CTkButton(right, text="🔒 LOCKED",
-                                       width=118, height=40,
+                                       width=112, height=34,
                                        font=font(12, "bold"),
                                        fg_color=AMBER,
                                        text_color="#FFFFFF",
                                        hover_color=_darken(AMBER),
                                        corner_radius=10,
                                        command=self._toggle_lock)
-        self._lock_btn.pack(side="left", padx=6, pady=9)
+        self._lock_btn.pack(side="left", padx=6, pady=7)
         self._lock_btn.bind("<Button-3>", self._change_passcode)  # right-click
 
         # CP mode
         self._cp_btn = ctk.CTkButton(right, text="DUAL",
-                                     width=88, height=40,
+                                     width=84, height=34,
                                      font=font(12, "bold"),
                                      fg_color=CYAN,
                                      text_color="#FFFFFF",
                                      hover_color=_darken(CYAN),
                                      corner_radius=10,
                                      command=self._toggle_cp_mode)
-        self._cp_btn.pack(side="left", padx=6, pady=9)
+        self._cp_btn.pack(side="left", padx=6, pady=7)
 
         # start/stop
         self._start_stop_btn = ctk.CTkButton(right, text="▶ START",
-                                             width=140, height=40,
-                                             font=font(14, "bold"),
+                                             width=132, height=34,
+                                             font=font(13, "bold"),
                                              fg_color=SUCCESS,
                                              text_color="#FFFFFF",
                                              hover_color=_darken(SUCCESS),
                                              corner_radius=10,
                                              command=self._toggle_start_stop)
-        self._start_stop_btn.pack(side="left", padx=6, pady=9)
+        self._start_stop_btn.pack(side="left", padx=6, pady=7)
 
     def _build_content(self):
-        content = self._scroll
+        content = self._content
 
         # ── row 1: sensor controls ────────────────────────────────────────────
         sr = ctk.CTkFrame(content, fg_color="transparent")
-        sr.pack(fill="x", padx=16, pady=(16, 8))
+        sr.pack(fill="x", padx=12, pady=(10, 6))
         sr.columnconfigure(0, weight=1)
         sr.columnconfigure(1, weight=1)
 
@@ -173,6 +174,8 @@ class AhuControlScreen(ctk.CTkFrame):
             min_val=15.0, max_val=30.0, step=0.5,
         )
         self._temp_ctrl.grid(row=0, column=0, padx=(0, 8), sticky="nsew")
+        self._temp_ctrl.configure(height=210)
+        self._temp_ctrl.pack_propagate(False)
 
         self._hum_ctrl = _SensorControl(
             sr, label="HUMIDITY", unit="%RH", color=HUM_COL,
@@ -181,31 +184,30 @@ class AhuControlScreen(ctk.CTkFrame):
             min_val=30.0, max_val=80.0, step=0.5,
         )
         self._hum_ctrl.grid(row=0, column=1, padx=(8, 0), sticky="nsew")
+        self._hum_ctrl.configure(height=210)
+        self._hum_ctrl.pack_propagate(False)
 
         # ── row 2: component status ───────────────────────────────────────────
         comp_outer = ctk.CTkFrame(content, fg_color=T("card"),
                                   corner_radius=16,
                                   border_width=1, border_color=T("card_border"))
-        comp_outer.pack(fill="x", padx=16, pady=8)
+        comp_outer.pack(fill="x", padx=12, pady=6)
         ctk.CTkLabel(comp_outer, text="COMPONENT STATUS",
                      font=font(11, "bold"), text_color=T("text_sec")).pack(
-            anchor="w", padx=16, pady=(12, 4))
+            anchor="w", padx=14, pady=(10, 2))
 
         self._comp_scroll = ctk.CTkScrollableFrame(comp_outer,
                                                     fg_color="transparent",
-                                                    height=120,
+                                                    height=94,
                                                     orientation="horizontal")
-        self._comp_scroll.pack(fill="x", padx=8, pady=(0, 12))
+        self._comp_scroll.pack(fill="x", padx=8, pady=(0, 10))
         self._comp_indicators: dict = {}
         self._build_component_indicators()
 
-        # ── row 3: combo sensor (built later when data arrives) ───────────────
+        # ── row 3: combo sensor (optional) ────────────────────────────────────
+        # Keep it compact; only show if combo telemetry exists.
         self._combo_frame = ctk.CTkFrame(content, fg_color="transparent")
-        self._combo_frame.pack(fill="x", padx=16, pady=4)
-
-        # ── row 4: logs (admin) ───────────────────────────────────────────────
-        if self._role == "admin":
-            self._build_logs_section(content)
+        self._combo_frame.pack(fill="x", padx=12, pady=(2, 0))
 
     def _build_component_indicators(self):
         for w in self._comp_scroll.winfo_children():
@@ -532,7 +534,7 @@ class _SensorControl(ctk.CTkFrame):
         self._setpoint  = (min_val + max_val) / 2
 
         inner = ctk.CTkFrame(self, fg_color="transparent")
-        inner.pack(fill="both", expand=True, padx=20, pady=16)
+        inner.pack(fill="both", expand=True, padx=16, pady=12)
 
         # header
         hrow = ctk.CTkFrame(inner, fg_color="transparent")
@@ -553,12 +555,12 @@ class _SensorControl(ctk.CTkFrame):
 
         # actual value
         ctk.CTkFrame(inner, fg_color=T("border"), height=1).pack(
-            fill="x", pady=10)
+            fill="x", pady=8)
         ctk.CTkLabel(inner, text="ACTUAL",
                      font=font(10, "bold"), text_color=T("text_sec")).pack(anchor="w")
 
         self._actual_lbl = ctk.CTkLabel(inner, text="--.-",
-                                        font=font(42, "bold"),
+                                        font=font(34, "bold"),
                                         text_color=color)
         self._actual_lbl.pack(anchor="w")
         ctk.CTkLabel(inner, text=unit, font=font(14),
@@ -566,7 +568,7 @@ class _SensorControl(ctk.CTkFrame):
 
         # setpoint row
         ctk.CTkFrame(inner, fg_color=T("border"), height=1).pack(
-            fill="x", pady=10)
+            fill="x", pady=8)
 
         set_row = ctk.CTkFrame(inner, fg_color="transparent")
         set_row.pack(fill="x")
