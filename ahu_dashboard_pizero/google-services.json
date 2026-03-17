@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "600445539105",
+    "project_id": "almed-ahu-cloud",
+    "storage_bucket": "almed-ahu-cloud.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:600445539105:android:a009d7d1c4344d027d2460",
+        "android_client_info": {
+          "package_name": "Al_med.equipment"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEhD6G7resVDxTLqp3Ih0A9tbZqlvd-1Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

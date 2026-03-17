@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ALMED AHU Dashboard
+Comment=Auto-start AHU Dashboard in kiosk mode
+Exec=/home/almed/Documents/almed_ahu/ahu_dashboard/rpi_kiosk_setup/launch_kiosk.sh
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+
+
