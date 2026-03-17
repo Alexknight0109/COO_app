@@ -95,8 +95,12 @@ class AhuControlScreen(ctk.CTkFrame):
         bar.pack(fill="x")
         bar.pack_propagate(False)
 
+        # Use a 2-column layout so essential controls never overflow off-screen.
+        bar.grid_columnconfigure(0, weight=1)
+        bar.grid_columnconfigure(1, weight=0)
+
         left = ctk.CTkFrame(bar, fg_color="transparent")
-        left.pack(side="left", padx=12, fill="y")
+        left.grid(row=0, column=0, sticky="w", padx=12)
 
         ctk.CTkLabel(left, text="ALMED",
                      font=("Helvetica", 22, "bold"), text_color="#3B82F6").pack(
@@ -117,74 +121,41 @@ class AhuControlScreen(ctk.CTkFrame):
         self._ahu_info.pack(side="left")
 
         right = ctk.CTkFrame(bar, fg_color="transparent")
-        right.pack(side="right", padx=8, fill="y")
-
-        # admin-only buttons
-        if self._role == "admin":
-            ctk.CTkButton(right, text="🔄", width=40, height=40,
-                          font=font(16), fg_color="transparent",
-                          text_color=T("text_sec"), hover_color=T("surface2"),
-                          corner_radius=20,
-                          command=self._reset_confirm).pack(side="right", padx=2)
-            ctk.CTkButton(right, text="📶", width=40, height=40,
-                          font=font(16), fg_color="transparent",
-                          text_color=T("text_sec"), hover_color=T("surface2"),
-                          corner_radius=20,
-                          command=self._open_wifi).pack(side="right", padx=2)
+        right.grid(row=0, column=1, sticky="e", padx=8)
 
         # screen lock button
         self._lock_btn = ctk.CTkButton(right, text="🔒 LOCKED",
-                                       width=108, height=36,
+                                       width=118, height=40,
                                        font=font(12, "bold"),
                                        fg_color=AMBER,
                                        text_color="#FFFFFF",
                                        hover_color=_darken(AMBER),
                                        corner_radius=10,
                                        command=self._toggle_lock)
-        self._lock_btn.pack(side="right", padx=4)
+        self._lock_btn.pack(side="left", padx=6, pady=9)
         self._lock_btn.bind("<Button-3>", self._change_passcode)  # right-click
-
-        # theme toggle
-        is_dark = ctk.get_appearance_mode() == "Dark"
-        ctk.CTkButton(right, text="☀" if is_dark else "🌙",
-                      width=40, height=40, corner_radius=20,
-                      font=font(16), fg_color="transparent",
-                      text_color=T("text_sec"), hover_color=T("surface2"),
-                      command=self._app.toggle_theme).pack(side="right", padx=2)
-
-        # admin mode toggle
-        if self._role == "admin":
-            self._mode_btn = ctk.CTkButton(right, text="🌐 ONLINE",
-                                           width=104, height=36,
-                                           font=font(12, "bold"),
-                                           fg_color="#3B82F6",
-                                           text_color="#FFFFFF",
-                                           hover_color="#2563EB",
-                                           corner_radius=10,
-                                           command=self._toggle_mode)
-            self._mode_btn.pack(side="right", padx=4)
 
         # CP mode
         self._cp_btn = ctk.CTkButton(right, text="DUAL",
-                                     width=84, height=36,
+                                     width=88, height=40,
                                      font=font(12, "bold"),
                                      fg_color=CYAN,
                                      text_color="#FFFFFF",
                                      hover_color=_darken(CYAN),
                                      corner_radius=10,
                                      command=self._toggle_cp_mode)
-        self._cp_btn.pack(side="right", padx=4)
+        self._cp_btn.pack(side="left", padx=6, pady=9)
 
         # start/stop
         self._start_stop_btn = ctk.CTkButton(right, text="▶ START",
-                                             width=108, height=36,
-                                             font=font(13, "bold"),
+                                             width=140, height=40,
+                                             font=font(14, "bold"),
                                              fg_color=SUCCESS,
                                              text_color="#FFFFFF",
                                              hover_color=_darken(SUCCESS),
                                              corner_radius=10,
                                              command=self._toggle_start_stop)
-        self._start_stop_btn.pack(side="right", padx=4)
+        self._start_stop_btn.pack(side="left", padx=6, pady=9)
 
     def _build_content(self):
         content = self._scroll
@@ -354,13 +325,6 @@ class AhuControlScreen(ctk.CTkFrame):
                 self._cp_btn.configure(text="SNGL", fg_color=TEAL,
                                        hover_color=_darken(TEAL))
 
-            if self._role == "admin" and hasattr(self, "_mode_btn"):
-                om = getattr(s, "online_mode", True)
-                self._mode_btn.configure(
-                    text="🌐 ONLINE" if om else "⚡ OFFLINE",
-                    fg_color="#3B82F6" if om else "#4B5563",
-                )
-
         self._ahu_info.update(s, online)
 
     def _update_sensors(self, t, s):
@@ -517,11 +481,6 @@ class _AhuInfoBar(ctk.CTkFrame):
                                       font=font(16, "bold"), text_color=T("text"))
         self._name_lbl.pack(side="left")
 
-        self._ver_badge = ctk.CTkLabel(self, text="",
-                                       font=font(10), text_color="#FFFFFF",
-                                       fg_color=INDIGO, corner_radius=5,
-                                       padx=6, pady=2)
-
         self._online_dot = ctk.CTkFrame(self, fg_color="#6B7280",
                                         width=8, height=8, corner_radius=4)
         self._online_dot.pack_propagate(False)
@@ -536,11 +495,6 @@ class _AhuInfoBar(ctk.CTkFrame):
 
     def update(self, state: AhuState, online: bool):
         if state:
-            ver = getattr(state, "version", None)
-            if ver:
-                self._ver_badge.configure(text=f"fw {ver}")
-                self._ver_badge.pack(side="left", padx=4)
-
             running = getattr(state, "run", False)
             if running:
                 self._run_badge.configure(text="RUNNING",
