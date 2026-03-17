@@ -7,6 +7,17 @@ from app.theme import T, font
 from app.widgets.passcode_dialog import PasscodeDialog
 
 
+def _mix(hex_a: str, hex_b: str, t: float) -> str:
+    """Blend two #RRGGBB colours. t=0 → a, t=1 → b."""
+    t = max(0.0, min(1.0, float(t)))
+    ar, ag, ab = int(hex_a[1:3], 16), int(hex_a[3:5], 16), int(hex_a[5:7], 16)
+    br, bg, bb = int(hex_b[1:3], 16), int(hex_b[3:5], 16), int(hex_b[5:7], 16)
+    r = int(ar * (1 - t) + br * t)
+    g = int(ag * (1 - t) + bg * t)
+    b = int(ab * (1 - t) + bb * t)
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
 class LoginScreen(ctk.CTkFrame):
     def __init__(self, parent, app, **kwargs):
         super().__init__(parent, fg_color=T("bg"), corner_radius=0, **kwargs)
@@ -117,7 +128,9 @@ class LoginScreen(ctk.CTkFrame):
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(expand=True, fill="both", padx=14, pady=18)
 
-        icon_f = ctk.CTkFrame(inner, fg_color="rgba(255,255,255,0.15)",
+        # Tk (and therefore CustomTkinter) doesn't support rgba() colours.
+        # Approximate a translucent white by blending with the card gradient colour.
+        icon_f = ctk.CTkFrame(inner, fg_color=_mix(bg_from, "#FFFFFF", 0.18),
                               width=56, height=56, corner_radius=14)
         icon_f.pack_propagate(False)
         icon_f.pack(pady=(0, 10))
@@ -127,7 +140,7 @@ class LoginScreen(ctk.CTkFrame):
         ctk.CTkLabel(inner, text=title, font=font(16, "bold"),
                      text_color="#FFFFFF").pack()
         ctk.CTkLabel(inner, text=subtitle, font=font(11),
-                     text_color="rgba(255,255,255,0.8)",
+                     text_color="#E5E7EB",
                      justify="center").pack()
 
     def _admin_login(self):
