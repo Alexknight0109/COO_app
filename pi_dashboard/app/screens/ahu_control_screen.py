@@ -92,24 +92,23 @@ class AhuControlScreen(ctk.CTkFrame):
         self._on_update()
 
     def _build_topbar(self):
-        # Slim top bar for 1024×600 so content gets maximum height.
-        # Don't hardcode height; let it collapse to content with minimal padding.
-        bar = ctk.CTkFrame(self, fg_color=T("topbar"), corner_radius=0)
+        # Compact top bar (approved mock): fixed height, tight padding.
+        bar = ctk.CTkFrame(self, fg_color=T("topbar"), corner_radius=0, height=48)
         bar.pack(fill="x")
+        bar.pack_propagate(False)
 
         # Use a 2-column layout so essential controls never overflow off-screen.
         bar.grid_columnconfigure(0, weight=1)
         bar.grid_columnconfigure(1, weight=0)
 
         left = ctk.CTkFrame(bar, fg_color="transparent")
-        # Match reference: very tight vertical padding in top bar.
-        left.grid(row=0, column=0, sticky="w", padx=8, pady=0)
+        left.grid(row=0, column=0, sticky="w", padx=14, pady=0)
 
         ctk.CTkLabel(left, text="ALMED",
                      font=("Helvetica", 18, "bold"), text_color="#3B82F6").pack(
             side="left", pady=0)
         ctk.CTkFrame(left, fg_color=T("border"), width=1).pack(
-            side="left", fill="y", padx=10, pady=0)
+            side="left", fill="y", padx=12, pady=8)
 
         # back button
         ctk.CTkButton(left, text="‹ Back", width=68, height=30,
@@ -117,18 +116,18 @@ class AhuControlScreen(ctk.CTkFrame):
                       text_color=T("text_sec"), hover_color=T("surface2"),
                       corner_radius=8,
                       command=lambda: self._app.show_dashboard(self._role)).pack(
-            side="left", padx=(0, 8), pady=0)
+            side="left", padx=(0, 10), pady=0)
 
         # AHU info
         self._ahu_info = _AhuInfoBar(left, self._provider, self._key)
         self._ahu_info.pack(side="left")
 
         right = ctk.CTkFrame(bar, fg_color="transparent")
-        right.grid(row=0, column=1, sticky="e", padx=8, pady=0)
+        right.grid(row=0, column=1, sticky="e", padx=14, pady=0)
 
         # screen lock button
         self._lock_btn = ctk.CTkButton(right, text="🔒 LOCKED",
-                                       width=106, height=30,
+                                       width=108, height=22,
                                        font=font(11, "bold"),
                                        fg_color=AMBER,
                                        text_color="#FFFFFF",
@@ -140,7 +139,7 @@ class AhuControlScreen(ctk.CTkFrame):
 
         # CP mode
         self._cp_btn = ctk.CTkButton(right, text="DUAL",
-                                     width=78, height=30,
+                                     width=72, height=22,
                                      font=font(11, "bold"),
                                      fg_color=CYAN,
                                      text_color="#FFFFFF",
@@ -151,7 +150,7 @@ class AhuControlScreen(ctk.CTkFrame):
 
         # start/stop
         self._start_stop_btn = ctk.CTkButton(right, text="▶ START",
-                                             width=124, height=30,
+                                             width=96, height=22,
                                              font=font(12, "bold"),
                                              fg_color=SUCCESS,
                                              text_color="#FFFFFF",
@@ -166,7 +165,7 @@ class AhuControlScreen(ctk.CTkFrame):
         # ── row 1: sensor controls ────────────────────────────────────────────
         sr = ctk.CTkFrame(content, fg_color="transparent")
         # Pull content up; minimize wasted space under the top bar.
-        sr.pack(fill="x", padx=12, pady=(2, 6))
+        sr.pack(fill="x", padx=14, pady=(10, 6))
         sr.columnconfigure(0, weight=1)
         sr.columnconfigure(1, weight=1)
 
@@ -177,8 +176,7 @@ class AhuControlScreen(ctk.CTkFrame):
             min_val=15.0, max_val=30.0, step=0.5,
         )
         self._temp_ctrl.grid(row=0, column=0, padx=(0, 8), sticky="nsew")
-        # Ensure setpoint +/- controls remain visible (fixed 1024×600 layout).
-        self._temp_ctrl.configure(height=240)
+        self._temp_ctrl.configure(height=210)
         self._temp_ctrl.pack_propagate(False)
 
         self._hum_ctrl = _SensorControl(
@@ -188,7 +186,7 @@ class AhuControlScreen(ctk.CTkFrame):
             min_val=30.0, max_val=80.0, step=0.5,
         )
         self._hum_ctrl.grid(row=0, column=1, padx=(8, 0), sticky="nsew")
-        self._hum_ctrl.configure(height=240)
+        self._hum_ctrl.configure(height=210)
         self._hum_ctrl.pack_propagate(False)
 
         # ── row 2: component status ───────────────────────────────────────────
@@ -538,7 +536,7 @@ class _SensorControl(ctk.CTkFrame):
         self._setpoint  = (min_val + max_val) / 2
 
         inner = ctk.CTkFrame(self, fg_color="transparent")
-        inner.pack(fill="both", expand=True, padx=14, pady=10)
+        inner.pack(fill="both", expand=True, padx=16, pady=12)
 
         # header
         hrow = ctk.CTkFrame(inner, fg_color="transparent")
@@ -567,19 +565,21 @@ class _SensorControl(ctk.CTkFrame):
             self._lock_lbl.grid(row=0, column=1, sticky="e", padx=(0, 2))
 
         # actual value
-        ctk.CTkFrame(inner, fg_color=T("border"), height=1).pack(fill="x", pady=6)
+        ctk.CTkFrame(inner, fg_color=T("border"), height=1).pack(
+            fill="x", pady=8)
         ctk.CTkLabel(inner, text="ACTUAL",
-                     font=font(10, "bold"), text_color=T("text_sec")).pack(anchor="w", pady=(0, 1))
+                     font=font(10, "bold"), text_color=T("text_sec")).pack(pady=(0, 2))
 
         self._actual_lbl = ctk.CTkLabel(inner, text="--.-",
-                                        font=font(34, "bold"),
+                                        font=font(40, "bold"),
                                         text_color=color)
-        self._actual_lbl.pack(anchor="w")
+        self._actual_lbl.pack()
         ctk.CTkLabel(inner, text=unit, font=font(14),
-                     text_color=T("text_sec")).pack(anchor="w", pady=(0, 1))
+                     text_color=T("text_sec")).pack(pady=(0, 2))
 
         # setpoint row
-        ctk.CTkFrame(inner, fg_color=T("border"), height=1).pack(fill="x", pady=6)
+        ctk.CTkFrame(inner, fg_color=T("border"), height=1).pack(
+            fill="x", pady=8)
 
         set_row = ctk.CTkFrame(inner, fg_color="transparent")
         set_row.pack(fill="x")
@@ -589,27 +589,27 @@ class _SensorControl(ctk.CTkFrame):
             pady=(0, 0))
 
         ctrl_row = ctk.CTkFrame(inner, fg_color="transparent")
-        ctrl_row.pack(fill="x", pady=(4, 0))
+        ctrl_row.pack(fill="x", pady=(6, 0))
         ctrl_row.grid_columnconfigure(0, weight=1)
         ctrl_row.grid_columnconfigure(1, weight=0)
         ctrl_row.grid_columnconfigure(2, weight=1)
 
         self._dec_btn = ctk.CTkButton(
-            ctrl_row, text="−", width=48, height=48,
-            font=font(22, "bold"), fg_color=_tint(color, 0.15),
+            ctrl_row, text="−", width=54, height=54,
+            font=font(24, "bold"), fg_color=_tint(color, 0.15),
             text_color=color, hover_color=_tint(color, 0.25),
             corner_radius=14,
             command=self._decrement)
         self._dec_btn.grid(row=0, column=0, sticky="e", padx=(0, 10))
 
         self._set_lbl = ctk.CTkLabel(ctrl_row, text="--.-",
-                                     font=font(26, "bold"), text_color=color,
-                                     width=86)
+                                     font=font(30, "bold"), text_color=color,
+                                     width=90)
         self._set_lbl.grid(row=0, column=1)
 
         self._inc_btn = ctk.CTkButton(
-            ctrl_row, text="+", width=48, height=48,
-            font=font(22, "bold"), fg_color=color,
+            ctrl_row, text="+", width=54, height=54,
+            font=font(24, "bold"), fg_color=color,
             text_color="#FFFFFF", hover_color=_darken(color),
             corner_radius=14,
             command=self._increment)
