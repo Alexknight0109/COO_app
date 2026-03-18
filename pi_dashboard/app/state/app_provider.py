@@ -218,37 +218,37 @@ class AppProvider:
             self.mqtt.publish(unit.cmd_topic, payload)
 
     def start_ahu(self, key: str):
-        self._cmd(key, {"cmd": "start"})
+        self._cmd(key, {"start": True})
 
     def stop_ahu(self, key: str):
-        self._cmd(key, {"cmd": "stop"})
+        self._cmd(key, {"stop": True})
 
     def toggle_ahu(self, key: str):
-        self._cmd(key, {"cmd": "toggle"})
+        self._cmd(key, {"toggle": True})
 
     def set_temperature(self, key: str, value: float):
-        self._cmd(key, {"cmd": "setpoint", "value": value})
+        self._cmd(key, {"setpoint": float(value)})
 
     def set_humidity(self, key: str, value: float):
-        self._cmd(key, {"cmd": "humset", "value": value})
+        self._cmd(key, {"humset": float(value)})
 
     def toggle_fan_speed(self, key: str):
-        self._cmd(key, {"cmd": "fanToggle"})
+        self._cmd(key, {"fanToggle": True})
 
     def set_fan_speed(self, key: str, speed: int):
-        self._cmd(key, {"cmd": "fan", "value": speed})
+        self._cmd(key, {"fan": int(speed)})
 
     def set_mode(self, key: str, online: bool):
-        self._cmd(key, {"cmd": "mode", "value": "online" if online else "offline"})
+        self._cmd(key, {"mode": "online" if online else "offline"})
 
     def set_cp_mode(self, key: str, mode: str):
-        self._cmd(key, {"cmd": "cpMode", "value": mode})
+        self._cmd(key, {"cpMode": str(mode)})
 
     def set_cp_active(self, key: str, cp: int):
-        self._cmd(key, {"cmd": "cpActive", "value": cp})
+        self._cmd(key, {"cpActive": int(cp)})
 
     def reset_esp32(self, key: str):
-        self._cmd(key, {"cmd": "reset"})
+        self._cmd(key, {"reset": True})
 
     def provision_wifi(self, key: str, ssid1: str, pass1: str,
                        ssid2: str = "", pass2: str = ""):
@@ -270,8 +270,12 @@ class AppProvider:
         unit = self.ahu_units.get(key)
         if unit:
             payload = {
-                "m1Start": m1_start, "m1Post": m1_post,
-                "m2Interval": m2_interval, "m2Run": m2_run, "m2Delay": m2_delay,
+                # ESP32 expects snake_case keys for provisioning.
+                "m1_start": int(m1_start),
+                "m1_post": int(m1_post),
+                "m2_interval": int(m2_interval),
+                "m2_run": int(m2_run),
+                "m2_delay": int(m2_delay),
             }
             self.mqtt.publish(unit.prov_motor_timings_topic, payload)
 
