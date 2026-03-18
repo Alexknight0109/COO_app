@@ -92,7 +92,8 @@ class AhuControlScreen(ctk.CTkFrame):
         self._on_update()
 
     def _build_topbar(self):
-        bar = ctk.CTkFrame(self, fg_color=T("topbar"), corner_radius=0, height=48)
+        # Slim top bar for 1024×600 so content gets maximum height.
+        bar = ctk.CTkFrame(self, fg_color=T("topbar"), corner_radius=0, height=40)
         bar.pack(fill="x")
         bar.pack_propagate(False)
 
@@ -104,14 +105,14 @@ class AhuControlScreen(ctk.CTkFrame):
         left.grid(row=0, column=0, sticky="w", padx=12)
 
         ctk.CTkLabel(left, text="ALMED",
-                     font=("Helvetica", 22, "bold"), text_color="#3B82F6").pack(
-            side="left", pady=8)
+                     font=("Helvetica", 18, "bold"), text_color="#3B82F6").pack(
+            side="left", pady=4)
         ctk.CTkFrame(left, fg_color=T("border"), width=1).pack(
-            side="left", fill="y", padx=10, pady=8)
+            side="left", fill="y", padx=10, pady=6)
 
         # back button
-        ctk.CTkButton(left, text="‹ Back", width=72, height=36,
-                      font=font(13), fg_color="transparent",
+        ctk.CTkButton(left, text="‹ Back", width=68, height=30,
+                      font=font(12), fg_color="transparent",
                       text_color=T("text_sec"), hover_color=T("surface2"),
                       corner_radius=8,
                       command=lambda: self._app.show_dashboard(self._role)).pack(
@@ -126,37 +127,37 @@ class AhuControlScreen(ctk.CTkFrame):
 
         # screen lock button
         self._lock_btn = ctk.CTkButton(right, text="🔒 LOCKED",
-                                       width=112, height=34,
-                                       font=font(12, "bold"),
+                                       width=106, height=30,
+                                       font=font(11, "bold"),
                                        fg_color=AMBER,
                                        text_color="#FFFFFF",
                                        hover_color=_darken(AMBER),
-                                       corner_radius=10,
+                                       corner_radius=9,
                                        command=self._toggle_lock)
-        self._lock_btn.pack(side="left", padx=6, pady=7)
+        self._lock_btn.pack(side="left", padx=6, pady=5)
         self._lock_btn.bind("<Button-3>", self._change_passcode)  # right-click
 
         # CP mode
         self._cp_btn = ctk.CTkButton(right, text="DUAL",
-                                     width=84, height=34,
-                                     font=font(12, "bold"),
+                                     width=78, height=30,
+                                     font=font(11, "bold"),
                                      fg_color=CYAN,
                                      text_color="#FFFFFF",
                                      hover_color=_darken(CYAN),
-                                     corner_radius=10,
+                                     corner_radius=9,
                                      command=self._toggle_cp_mode)
-        self._cp_btn.pack(side="left", padx=6, pady=7)
+        self._cp_btn.pack(side="left", padx=6, pady=5)
 
         # start/stop
         self._start_stop_btn = ctk.CTkButton(right, text="▶ START",
-                                             width=132, height=34,
-                                             font=font(13, "bold"),
+                                             width=124, height=30,
+                                             font=font(12, "bold"),
                                              fg_color=SUCCESS,
                                              text_color="#FFFFFF",
                                              hover_color=_darken(SUCCESS),
-                                             corner_radius=10,
+                                             corner_radius=9,
                                              command=self._toggle_start_stop)
-        self._start_stop_btn.pack(side="left", padx=6, pady=7)
+        self._start_stop_btn.pack(side="left", padx=6, pady=5)
 
     def _build_content(self):
         content = self._content
@@ -480,7 +481,7 @@ class _AhuInfoBar(ctk.CTkFrame):
         name = unit.name if unit else "AHU Unit"
 
         self._name_lbl = ctk.CTkLabel(self, text=name,
-                                      font=font(16, "bold"), text_color=T("text"))
+                                      font=font(14, "bold"), text_color=T("text"))
         self._name_lbl.pack(side="left")
 
         self._online_dot = ctk.CTkFrame(self, fg_color="#6B7280",
@@ -489,10 +490,10 @@ class _AhuInfoBar(ctk.CTkFrame):
         self._online_dot.pack(side="left", padx=(8, 4))
 
         self._run_badge = ctk.CTkLabel(self, text="STOPPED",
-                                       font=font(10, "bold"),
+                                       font=font(9, "bold"),
                                        text_color="#6B7280",
                                        fg_color=T("surface2"),
-                                       corner_radius=6, padx=6, pady=2)
+                                       corner_radius=6, padx=6, pady=1)
         self._run_badge.pack(side="left", padx=2)
 
     def update(self, state: AhuState, online: bool):
@@ -539,32 +540,41 @@ class _SensorControl(ctk.CTkFrame):
         # header
         hrow = ctk.CTkFrame(inner, fg_color="transparent")
         hrow.pack(fill="x")
-        icon_f = ctk.CTkFrame(hrow, fg_color=_tint(color, 0.2),
-                              width=48, height=48, corner_radius=14)
+        hrow.grid_columnconfigure(0, weight=1)
+        hrow.grid_columnconfigure(1, weight=0)
+
+        title_wrap = ctk.CTkFrame(hrow, fg_color="transparent")
+        title_wrap.grid(row=0, column=0, sticky="nsew")
+
+        title = ctk.CTkFrame(title_wrap, fg_color="transparent")
+        title.pack(expand=True)
+
+        icon_f = ctk.CTkFrame(title, fg_color=_tint(color, 0.2),
+                              width=44, height=44, corner_radius=12)
         icon_f.pack_propagate(False)
         icon_f.pack(side="left")
-        ctk.CTkLabel(icon_f, text=icon, font=font(22),
+        ctk.CTkLabel(icon_f, text=icon, font=font(20),
                      text_color=color).pack(expand=True)
-        ctk.CTkLabel(hrow, text=label, font=font(12, "bold"),
+        ctk.CTkLabel(title, text=label, font=font(12, "bold"),
                      text_color=T("text_sec")).pack(side="left", padx=10)
 
         if locked:
             self._lock_lbl = ctk.CTkLabel(hrow, text="🔒",
                                           font=font(14), text_color=AMBER)
-            self._lock_lbl.pack(side="right")
+            self._lock_lbl.grid(row=0, column=1, sticky="e", padx=(0, 2))
 
         # actual value
         ctk.CTkFrame(inner, fg_color=T("border"), height=1).pack(
             fill="x", pady=8)
         ctk.CTkLabel(inner, text="ACTUAL",
-                     font=font(10, "bold"), text_color=T("text_sec")).pack(anchor="w")
+                     font=font(10, "bold"), text_color=T("text_sec")).pack(pady=(0, 2))
 
         self._actual_lbl = ctk.CTkLabel(inner, text="--.-",
-                                        font=font(34, "bold"),
+                                        font=font(40, "bold"),
                                         text_color=color)
-        self._actual_lbl.pack(anchor="w")
+        self._actual_lbl.pack()
         ctk.CTkLabel(inner, text=unit, font=font(14),
-                     text_color=T("text_sec")).pack(anchor="w")
+                     text_color=T("text_sec")).pack(pady=(0, 2))
 
         # setpoint row
         ctk.CTkFrame(inner, fg_color=T("border"), height=1).pack(
@@ -575,31 +585,34 @@ class _SensorControl(ctk.CTkFrame):
 
         ctk.CTkLabel(set_row, text="SETPOINT",
                      font=font(10, "bold"), text_color=T("text_sec")).pack(
-            side="left")
+            pady=(0, 0))
 
         ctrl_row = ctk.CTkFrame(inner, fg_color="transparent")
         ctrl_row.pack(fill="x", pady=(6, 0))
+        ctrl_row.grid_columnconfigure(0, weight=1)
+        ctrl_row.grid_columnconfigure(1, weight=0)
+        ctrl_row.grid_columnconfigure(2, weight=1)
 
         self._dec_btn = ctk.CTkButton(
-            ctrl_row, text="−", width=50, height=50,
-            font=font(22, "bold"), fg_color=_tint(color, 0.15),
+            ctrl_row, text="−", width=54, height=54,
+            font=font(24, "bold"), fg_color=_tint(color, 0.15),
             text_color=color, hover_color=_tint(color, 0.25),
             corner_radius=14,
             command=self._decrement)
-        self._dec_btn.pack(side="left", padx=(0, 8))
+        self._dec_btn.grid(row=0, column=0, sticky="e", padx=(0, 10))
 
         self._set_lbl = ctk.CTkLabel(ctrl_row, text="--.-",
-                                     font=font(26, "bold"), text_color=color,
+                                     font=font(30, "bold"), text_color=color,
                                      width=90)
-        self._set_lbl.pack(side="left")
+        self._set_lbl.grid(row=0, column=1)
 
         self._inc_btn = ctk.CTkButton(
-            ctrl_row, text="+", width=50, height=50,
-            font=font(22, "bold"), fg_color=color,
+            ctrl_row, text="+", width=54, height=54,
+            font=font(24, "bold"), fg_color=color,
             text_color="#FFFFFF", hover_color=_darken(color),
             corner_radius=14,
             command=self._increment)
-        self._inc_btn.pack(side="left", padx=(8, 0))
+        self._inc_btn.grid(row=0, column=2, sticky="w", padx=(10, 0))
 
         self._update_lock_state()
 
