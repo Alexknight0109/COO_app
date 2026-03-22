@@ -26,12 +26,9 @@ class AppProvider extends ChangeNotifier {
   List<AhuUnit>? _cachedAhuUnits;
   bool _ahuUnitsChanged = true;
   
-  // Pi Zero 2W: Track pending updates to batch notifications more aggressively
+  // RPi Performance: Track if updates are pending to batch notifications
   bool _hasPendingUpdates = false;
   DateTime _lastNotify = DateTime.now();
-
-  // Pi Zero 2W: tighter log cap to reduce RAM usage (512 MB total system RAM)
-  static const int _maxLogEntries = 30;
   
   // Screen Lock feature - blocks temp/humidity changes when locked
   // Lock state persists across restarts - can only unlock with passcode
@@ -216,8 +213,8 @@ class AppProvider extends ChangeNotifier {
       final logs = _logData.putIfAbsent(ahuId, () => []);
       logs.add(entry.value);
       
-      // Pi Zero 2W: keep only last 30 logs to limit RAM usage
-      while (logs.length > _maxLogEntries) {
+      // Keep only last 70 logs - FIFO (oldest gets deleted as new ones arrive)
+      while (logs.length > 70) {
         logs.removeAt(0);
       }
       _debouncedNotify();  // Debounced for RPi
@@ -261,12 +258,12 @@ class AppProvider extends ChangeNotifier {
     return parts.isNotEmpty ? parts[0] : topicData;
   }
 
-  /// Debounced notify – Pi Zero 2W is CPU-constrained so we batch more
-  /// aggressively: 500 ms for telemetry (sensor values change slowly anyway).
+  /// Debounced notify to reduce UI rebuilds (optimized for RPi)
   void _debouncedNotify() {
     _hasPendingUpdates = true;
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+    // RPi Performance: Increased debounce from 100ms to 250ms
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () {
       if (_hasPendingUpdates) {
         _hasPendingUpdates = false;
         _lastNotify = DateTime.now();
@@ -274,21 +271,21 @@ class AppProvider extends ChangeNotifier {
       }
     });
   }
-
-  /// Debounced state notify – state changes (run/stop, motor, CP) need a
-  /// reasonably prompt response but are still batched at 300 ms on Pi Zero 2W.
+  
+  /// Debounced state notify (for critical state changes)
   void _debouncedStateNotify() {
     _stateDebounceTimer?.cancel();
-    _stateDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+    // State updates need faster response but still debounced
+    _stateDebounceTimer = Timer(const Duration(milliseconds: 150), () {
       _lastNotify = DateTime.now();
       notifyListeners();
     });
   }
-
-  /// Throttled notify – at most one full rebuild every 600 ms.
+  
+  /// Throttled notify - ensures minimum time between notifications
   void _throttledNotify() {
     final now = DateTime.now();
-    if (now.difference(_lastNotify).inMilliseconds > 600) {
+    if (now.difference(_lastNotify).inMilliseconds > 300) {
       _lastNotify = now;
       notifyListeners();
     } else {

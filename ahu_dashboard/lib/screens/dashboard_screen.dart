@@ -43,8 +43,8 @@ class DashboardScreen extends StatelessWidget {
         child: SafeArea(
           child: Column(
             children: [
-              // Pi Zero 2W: top bar rarely changes – isolate its repaint layer
-              RepaintBoundary(child: _DashboardTopBar(isDark: isDark)),
+              // Top bar
+              _DashboardTopBar(isDark: isDark),
               // AHU Cards
               Expanded(
                 child: _AhuCardsList(isDark: isDark),

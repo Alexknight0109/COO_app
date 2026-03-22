@@ -9,7 +9,7 @@ import 'providers/theme_provider.dart';
 import 'screens/login_screen.dart';
 import 'theme/app_theme.dart';
 
-/// Detect if running on Raspberry Pi
+/// Detect if running on Raspberry Pi for performance optimizations
 bool get isRaspberryPi {
   if (!Platform.isLinux) return false;
   try {
@@ -20,92 +20,70 @@ bool get isRaspberryPi {
   }
 }
 
-/// Detect if running specifically on Pi Zero 2W.
-/// The Zero 2W reports "Raspberry Pi Zero 2" in /proc/cpuinfo (Revision 902120).
-bool get isPiZero2W {
-  if (!Platform.isLinux) return false;
-  try {
-    final cpuinfo = File('/proc/cpuinfo').readAsStringSync();
-    // Hardware field matches BCM2835 (all Zeros use this), but the Model line
-    // distinguishes Zero 2W from Zero 1W.
-    if (cpuinfo.contains('Zero 2')) return true;
-    // Fallback: check /proc/device-tree/model which is more reliable
-    final model = File('/proc/device-tree/model').readAsStringSync();
-    return model.contains('Zero 2');
-  } catch (_) {
-    return false;
-  }
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Disable all debug overlays (always off in production)
+  
+  // RPi Performance: Disable debug painting and checkerboards
   debugPaintSizeEnabled = false;
   debugPaintBaselinesEnabled = false;
   debugPaintLayerBordersEnabled = false;
   debugRepaintRainbowEnabled = false;
-
-  // Pi Zero 2W has 512 MB RAM – hint the engine to keep the raster cache lean.
-  // This reduces GPU memory pressure and prevents OOM on the constrained device.
-  if (isPiZero2W || isRaspberryPi) {
-    // Reduce picture cache to lower RAM footprint.  Default is 3; 1 is enough
-    // for a single-screen kiosk that doesn't animate between many pages.
-    PaintingBinding.instance.imageCache.maximumSize = 50;
-    PaintingBinding.instance.imageCache.maximumSizeBytes = 20 << 20; // 20 MB
-  }
-
-  // Fullscreen immersive kiosk – hide all OS chrome
+  
+  // Enable fullscreen mode on launch
   SystemChrome.setEnabledSystemUIMode(
     SystemUiMode.immersiveSticky,
-    overlays: [],
+    overlays: [], // Hide all system UI overlays
   );
-
-  // Force landscape – the 7-inch Pi display is always landscape
+  
+  // Set preferred orientations (optional - can be removed if rotation is needed)
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
-
-  // Pre-load screen-lock state before the first frame renders
+  
+  // Pre-load screen lock state before app starts
   final appProvider = AppProvider();
   await appProvider.loadScreenLockPasscode();
-
+  
   runApp(AhuDashboardApp(appProvider: appProvider));
 }
 
-/// Scroll behaviour: no visible scrollbar, touch + mouse drag, bouncing physics.
+/// Custom scroll behavior that:
+/// - Hides scrollbars completely (no side scrollbar)
+/// - Enables touch scrolling on all devices
+/// - Uses bouncing physics for natural touch feel
 class TouchFriendlyScrollBehavior extends MaterialScrollBehavior {
   @override
   Set<PointerDeviceKind> get dragDevices => {
-        PointerDeviceKind.touch,
-        PointerDeviceKind.mouse,
-        PointerDeviceKind.stylus,
-        PointerDeviceKind.unknown,
-      };
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.unknown,
+  };
 
   @override
-  Widget buildScrollbar(
-      BuildContext context, Widget child, ScrollableDetails details) {
+  Widget buildScrollbar(BuildContext context, Widget child, ScrollableDetails details) {
+    // Return child directly without wrapping in Scrollbar - hides scrollbar completely
     return child;
   }
 
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) {
-    return const BouncingScrollPhysics(
-        parent: AlwaysScrollableScrollPhysics());
+    // Use bouncing physics for natural touch feel
+    return const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
   }
 }
 
 class AhuDashboardApp extends StatelessWidget {
   final AppProvider appProvider;
-
+  
   const AhuDashboardApp({super.key, required this.appProvider});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // Use pre-loaded provider with lock state already initialized
         ChangeNotifierProvider.value(value: appProvider),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
@@ -117,6 +95,7 @@ class AhuDashboardApp extends StatelessWidget {
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
+            // Apply global touch-friendly scroll behavior (no scrollbar, touch/drag everywhere)
             scrollBehavior: TouchFriendlyScrollBehavior(),
             home: const LoginScreen(),
           );

@@ -48,10 +48,8 @@ class _AhuControlScreenState extends State<AhuControlScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // Pi Zero 2W: isolate top bar – it changes rarely
-              RepaintBoundary(
-                child: _TopBar(ahuId: widget.ahuId, isDark: isDark),
-              ),
+              // Top bar
+              _TopBar(ahuId: widget.ahuId, isDark: isDark),
               // Content
               Expanded(
                 child: SingleChildScrollView(
@@ -61,27 +59,19 @@ class _AhuControlScreenState extends State<AhuControlScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     children: [
-                      // Pi Zero 2W: each section in its own repaint layer so a
-                      // telemetry tick only repaints the section that changed.
-                      RepaintBoundary(
-                        child: _SensorControls(ahuId: widget.ahuId),
-                      ),
+                      // Temperature & Humidity
+                      _SensorControls(ahuId: widget.ahuId),
                       const SizedBox(height: 16),
-                      RepaintBoundary(
-                        child: _ComboSensorBoxes(ahuId: widget.ahuId),
-                      ),
-                      RepaintBoundary(
-                        child: _ComponentStatus(ahuId: widget.ahuId),
-                      ),
+                      // Compact AQI & HEPA boxes (tap to expand) - combo sensors only
+                      _ComboSensorBoxes(ahuId: widget.ahuId),
+                      // Component Status
+                      _ComponentStatus(ahuId: widget.ahuId),
                       const SizedBox(height: 16),
-                      // Log viewer: heavy list – always isolated
-                      RepaintBoundary(
-                        child: _LogsWrapper(
-                          ahuId: widget.ahuId,
-                          isExpanded: _showLogs,
-                          onToggle: () =>
-                              setState(() => _showLogs = !_showLogs),
-                        ),
+                      // Logs (collapsible) - ADMIN ONLY
+                      _LogsWrapper(
+                        ahuId: widget.ahuId,
+                        isExpanded: _showLogs,
+                        onToggle: () => setState(() => _showLogs = !_showLogs),
                       ),
                     ],
                   ),

@@ -1,14 +1,12 @@
 #!/bin/bash
 # =============================================================================
-# ALMED AHU Dashboard - Pi Zero 2W Kiosk Mode Setup
+# ALMED AHU Dashboard - Complete Kiosk Mode Setup
 # =============================================================================
-# This script configures the Raspberry Pi Zero 2W to:
+# This script configures the Raspberry Pi to:
 # 1. Boot directly into the AHU Dashboard (kiosk mode)
 # 2. Replace the boot splash with ALMED logo
 # 3. Hide the Raspberry Pi boot logo
 # 4. Auto-hide cursor and disable screen blanking
-# 5. Allocate 128 MB GPU memory (required for Flutter on VideoCore IV)
-# 6. Enable a 512 MB swap file to compensate for the 512 MB RAM limit
 #
 # Run with: sudo ./setup_kiosk.sh
 # =============================================================================
@@ -24,7 +22,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}"
 echo "=============================================="
-echo "   ALMED AHU Dashboard - Pi Zero 2W Kiosk Setup"
+echo "   ALMED AHU Dashboard - Kiosk Mode Setup"
 echo "=============================================="
 echo -e "${NC}"
 
@@ -41,97 +39,21 @@ USER_HOME="/home/$ACTUAL_USER"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-echo -e "${YELLOW}Setting up Pi Zero 2W kiosk mode for user: $ACTUAL_USER${NC}"
+echo -e "${YELLOW}Setting up kiosk mode for user: $ACTUAL_USER${NC}"
 echo ""
 
 # =============================================================================
-# Step 0: Pi Zero 2W hardware optimisations
+# Step 1: Install required packages
 # =============================================================================
-echo -e "${GREEN}[0/8] Applying Pi Zero 2W hardware settings...${NC}"
-
-CONFIG_FILE=""
-if [ -f /boot/firmware/config.txt ]; then
-    CONFIG_FILE="/boot/firmware/config.txt"
-elif [ -f /boot/config.txt ]; then
-    CONFIG_FILE="/boot/config.txt"
-fi
-
-if [ -n "$CONFIG_FILE" ]; then
-    # Raise GPU memory to 128 MB.  The default 64 MB is too small for Flutter's
-    # raster cache on a 1024×600 display with the VideoCore IV GPU.
-    if grep -q "^gpu_mem=" "$CONFIG_FILE"; then
-        sed -i "s/^gpu_mem=.*/gpu_mem=128/" "$CONFIG_FILE"
-    else
-        echo "" >> "$CONFIG_FILE"
-        echo "# Pi Zero 2W – Flutter needs at least 128 MB GPU memory" >> "$CONFIG_FILE"
-        echo "gpu_mem=128" >> "$CONFIG_FILE"
-    fi
-    echo "  ✓ GPU memory set to 128 MB"
-fi
-
-# Enable / enlarge the swap file so the 512 MB RAM is less of a constraint.
-# dphys-swapfile is available on Raspberry Pi OS Lite and Desktop.
-if command -v dphys-swapfile &>/dev/null; then
-    SWAP_CONF="/etc/dphys-swapfile"
-    if [ -f "$SWAP_CONF" ]; then
-        sed -i "s/^CONF_SWAPSIZE=.*/CONF_SWAPSIZE=512/" "$SWAP_CONF"
-    else
-        echo "CONF_SWAPSIZE=512" > "$SWAP_CONF"
-    fi
-    dphys-swapfile setup  > /dev/null 2>&1 || true
-    dphys-swapfile swapon > /dev/null 2>&1 || true
-    echo "  ✓ Swap set to 512 MB"
-else
-    echo "  ⚠ dphys-swapfile not found – swap not configured"
-fi
-
-# =============================================================================
-# Step 1: Network & MQTT (ESP32 mDNS compatible – no direct IP needed)
-# =============================================================================
-# ESP32 uses mqttHost = "almed-ahu.local" – Pi must advertise via mDNS
-echo -e "${GREEN}[1/8] Configuring network & MQTT for ESP32 compatibility...${NC}"
-
-HOSTNAME="almed-ahu"
-
-# Set hostname so almed-ahu.local resolves
-hostnamectl set-hostname "$HOSTNAME"
-echo "$HOSTNAME" | tee /etc/hostname > /dev/null
-if grep -q "127\.0\.1\.1" /etc/hosts; then
-    sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t$HOSTNAME/" /etc/hosts
-else
-    echo "127.0.1.1	$HOSTNAME" >> /etc/hosts
-fi
-echo "  ✓ Hostname set to $HOSTNAME (almed-ahu.local after reboot)"
-
-# Install avahi + libnss-mdns for mDNS (.local resolution)
-apt-get install -y -qq avahi-daemon libnss-mdns > /dev/null 2>&1
-systemctl enable avahi-daemon
-systemctl start avahi-daemon
-echo "  ✓ mDNS enabled – Pi discoverable as $HOSTNAME.local"
-
-# Install and configure Mosquitto MQTT broker
-apt-get install -y -qq mosquitto mosquitto-clients libgtk-3-0 libblkid1 liblzma5 > /dev/null 2>&1
-tee /etc/mosquitto/conf.d/almed.conf > /dev/null <<'MQTT'
-listener 1883
-allow_anonymous false
-password_file /etc/mosquitto/passwd
-MQTT
-mosquitto_passwd -b -c /etc/mosquitto/passwd almed 'Almed1234$'
-systemctl enable mosquitto
-systemctl restart mosquitto
-echo "  ✓ MQTT broker on almed-ahu.local:1883 (user: almed)"
-
-# =============================================================================
-# Step 2: Install required packages
-# =============================================================================
-echo -e "${GREEN}[2/8] Installing required packages...${NC}"
+echo -e "${GREEN}[1/7] Installing required packages...${NC}"
+apt-get update -qq
 apt-get install -y -qq unclutter plymouth plymouth-themes xdotool > /dev/null 2>&1
 echo "  ✓ Packages installed"
 
 # =============================================================================
-# Step 3: Create ALMED Plymouth Boot Theme
+# Step 2: Create ALMED Plymouth Boot Theme
 # =============================================================================
-echo -e "${GREEN}[3/8] Creating ALMED boot splash theme...${NC}"
+echo -e "${GREEN}[2/7] Creating ALMED boot splash theme...${NC}"
 
 PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/almed"
 mkdir -p "$PLYMOUTH_THEME_DIR"
@@ -233,7 +155,7 @@ echo "  ✓ Plymouth theme created"
 # =============================================================================
 # Step 3: Configure boot settings
 # =============================================================================
-echo -e "${GREEN}[4/8] Configuring boot settings...${NC}"
+echo -e "${GREEN}[3/7] Configuring boot settings...${NC}"
 
 # Backup original cmdline.txt
 if [ ! -f /boot/firmware/cmdline.txt.backup ]; then
@@ -296,7 +218,7 @@ plymouth-set-default-theme -R almed 2>/dev/null || echo "  ⚠ Plymouth theme se
 # =============================================================================
 # Step 4: Create kiosk autostart
 # =============================================================================
-echo -e "${GREEN}[5/8] Setting up autostart...${NC}"
+echo -e "${GREEN}[4/7] Setting up autostart...${NC}"
 
 # Create autostart directory
 AUTOSTART_DIR="$USER_HOME/.config/autostart"
@@ -324,7 +246,7 @@ echo "  ✓ Autostart configured"
 # =============================================================================
 # Step 5: Create exit-to-desktop script
 # =============================================================================
-echo -e "${GREEN}[6/8] Creating exit-to-desktop helper...${NC}"
+echo -e "${GREEN}[5/7] Creating exit-to-desktop helper...${NC}"
 
 cat > "$SCRIPT_DIR/exit_to_desktop.sh" << 'EOF'
 #!/bin/bash
@@ -356,7 +278,7 @@ echo "  ✓ Exit helper created"
 # =============================================================================
 # Step 6: Configure desktop for kiosk
 # =============================================================================
-echo -e "${GREEN}[7/8] Configuring desktop environment...${NC}"
+echo -e "${GREEN}[6/7] Configuring desktop environment...${NC}"
 
 # Run the disable_desktop script as the actual user
 if [ -f "$SCRIPT_DIR/disable_desktop.sh" ]; then
@@ -380,14 +302,12 @@ echo "  ✓ Desktop configured"
 # =============================================================================
 # Step 7: Build the Flutter app (if needed)
 # =============================================================================
-echo -e "${GREEN}[8/8] Checking Flutter build...${NC}"
+echo -e "${GREEN}[7/7] Checking Flutter build...${NC}"
 
 BUNDLE_PATH="$PROJECT_DIR/build/linux/arm64/release/bundle"
-if [ ! -f "$BUNDLE_PATH/ahu_dashboard_pizero" ]; then
-    echo "  ⚠ Release build not found. Cross-compile on a dev machine:"
+if [ ! -f "$BUNDLE_PATH/ahu_dashboard" ]; then
+    echo "  ⚠ Release build not found. Build with:"
     echo "    cd $PROJECT_DIR && flutter build linux --release"
-    echo "  Then copy the bundle to this Pi:"
-    echo "    rsync -avz build/linux/arm64/release/bundle/ $ACTUAL_USER@<pi-ip>:$PROJECT_DIR/build/linux/arm64/release/bundle/"
 else
     echo "  ✓ Release build found"
 fi
@@ -401,8 +321,6 @@ echo "   Kiosk Mode Setup Complete!"
 echo "==============================================${NC}"
 echo ""
 echo "What was configured:"
-echo "  ✓ Hostname almed-ahu + mDNS – ESP32 connects to almed-ahu.local (no direct IP)"
-echo "  ✓ MQTT broker on port 1883 (user: almed / Almed1234\$)"
 echo "  ✓ ALMED boot splash (replaces Raspberry Pi logo)"
 echo "  ✓ Dashboard auto-starts on boot"
 echo "  ✓ Screen blanking disabled"
