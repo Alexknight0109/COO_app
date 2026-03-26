@@ -21,6 +21,7 @@ class AppProvider extends ChangeNotifier {
   final Map<String, String> _statusData = {};
   final Map<String, bool> _awsStatusData = {};  // AWS cloud connection status per AHU
   final Set<String> _hospitalVisibleAhuKeys = {};
+  final Set<String> _hospitalHiddenAhuKeys = {};
   bool _isConnected = false;
   
   // Cache for frequently accessed data
@@ -38,6 +39,7 @@ class AppProvider extends ChangeNotifier {
   static const String _passcodeKey = 'screen_lock_passcode';
   static const String _lockStateKey = 'screen_lock_state';
   static const String _hospitalVisibleAhuKeysKey = 'hospital_visible_ahu_keys';
+  static const String _hospitalHiddenAhuKeysKey = 'hospital_hidden_ahu_keys';
 
   // Getters
   UserRole? get currentRole => _currentRole;
@@ -56,6 +58,10 @@ class AppProvider extends ChangeNotifier {
       _hospitalVisibleAhuKeys
         ..clear()
         ..addAll(savedVisibleKeys);
+      final savedHiddenKeys = prefs.getStringList(_hospitalHiddenAhuKeysKey) ?? const [];
+      _hospitalHiddenAhuKeys
+        ..clear()
+        ..addAll(savedHiddenKeys);
       debugPrint('AppProvider: Loaded screen lock - locked: $_isScreenLocked');
       notifyListeners();
     } catch (e) {
@@ -174,15 +180,17 @@ class AppProvider extends ChangeNotifier {
     return '$ahuId@$site/$room';
   }
   bool isAhuVisibleToHospital(AhuUnit ahu) {
-    // Default to visible unless explicitly disabled by admin.
-    return _hospitalVisibleAhuKeys.contains(_ahuVisibilityKey(ahu));
+    // Default to visible unless explicitly hidden by admin.
+    return !_hospitalHiddenAhuKeys.contains(_ahuVisibilityKey(ahu));
   }
 
   Future<void> setAhuVisibilityForHospital(AhuUnit ahu, bool isVisible) async {
     final key = _ahuVisibilityKey(ahu);
     if (isVisible) {
+      _hospitalHiddenAhuKeys.remove(key);
       _hospitalVisibleAhuKeys.add(key);
     } else {
+      _hospitalHiddenAhuKeys.add(key);
       _hospitalVisibleAhuKeys.remove(key);
     }
     await _saveHospitalVisibility();
@@ -195,6 +203,10 @@ class AppProvider extends ChangeNotifier {
       await prefs.setStringList(
         _hospitalVisibleAhuKeysKey,
         _hospitalVisibleAhuKeys.toList(),
+      );
+      await prefs.setStringList(
+        _hospitalHiddenAhuKeysKey,
+        _hospitalHiddenAhuKeys.toList(),
       );
     } catch (e) {
       debugPrint('AppProvider: Error saving AHU visibility: $e');
@@ -428,8 +440,7 @@ class AppProvider extends ChangeNotifier {
     );
     
     addAhuUnit(newAhu);
-    // New devices are visible to hospital by default.
-    _hospitalVisibleAhuKeys.add(uniqueKey);
+    // Keep current visibility decision intact; new keys default to visible.
     _saveHospitalVisibility();
     debugPrint('AppProvider: Auto-discovered AHU - $ahuId at $discoveredSite/$discoveredRoom');
   }
