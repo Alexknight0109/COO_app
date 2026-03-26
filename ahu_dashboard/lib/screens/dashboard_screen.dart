@@ -302,7 +302,7 @@ class _AhuCardsList extends StatelessWidget {
     final isSmallScreen = screenHeight < 650;
     
     return Selector<AppProvider, List<AhuUnit>>(
-      selector: (_, provider) => provider.ahuUnits,
+      selector: (_, provider) => provider.visibleAhuUnits,
       builder: (context, ahus, _) {
         if (ahus.isEmpty) {
           return _EmptyState(isDark: isDark);

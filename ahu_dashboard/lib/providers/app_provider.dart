@@ -20,6 +20,7 @@ class AppProvider extends ChangeNotifier {
   final Map<String, List<AhuLog>> _logData = {};
   final Map<String, String> _statusData = {};
   final Map<String, bool> _awsStatusData = {};  // AWS cloud connection status per AHU
+  final Set<String> _hospitalVisibleAhuKeys = {};
   bool _isConnected = false;
   
   // Cache for frequently accessed data
@@ -36,6 +37,7 @@ class AppProvider extends ChangeNotifier {
   String _screenLockPasscode = '123123';  // Default passcode
   static const String _passcodeKey = 'screen_lock_passcode';
   static const String _lockStateKey = 'screen_lock_state';
+  static const String _hospitalVisibleAhuKeysKey = 'hospital_visible_ahu_keys';
 
   // Getters
   UserRole? get currentRole => _currentRole;
@@ -50,6 +52,10 @@ class AppProvider extends ChangeNotifier {
       _screenLockPasscode = prefs.getString(_passcodeKey) ?? '123123';
       // Load lock state - defaults to true (locked) if not saved
       _isScreenLocked = prefs.getBool(_lockStateKey) ?? true;
+      final savedVisibleKeys = prefs.getStringList(_hospitalVisibleAhuKeysKey) ?? const [];
+      _hospitalVisibleAhuKeys
+        ..clear()
+        ..addAll(savedVisibleKeys);
       debugPrint('AppProvider: Loaded screen lock - locked: $_isScreenLocked');
       notifyListeners();
     } catch (e) {
@@ -137,6 +143,16 @@ class AppProvider extends ChangeNotifier {
     return _cachedAhuUnits!;
   }
 
+  /// AHUs visible on hospital dashboard.
+  /// Admin sees all AHUs regardless of visibility toggles.
+  List<AhuUnit> get visibleAhuUnits {
+    final units = ahuUnits;
+    if (_currentRole == UserRole.admin) return units;
+    return units.where((ahu) => isAhuVisibleToHospital(ahu)).toList();
+  }
+
+  Set<String> get hospitalVisibleAhuKeys => Set.unmodifiable(_hospitalVisibleAhuKeys);
+
   /// Get telemetry for specific AHU
   AhuTelemetry? getTelemetry(String ahuId) => _telemetryData[ahuId];
 
@@ -148,6 +164,35 @@ class AppProvider extends ChangeNotifier {
 
   /// Get status for specific AHU
   String? getStatus(String ahuId) => _statusData[ahuId];
+
+  String _ahuVisibilityKey(AhuUnit ahu) => '${ahu.id}@${ahu.site}/${ahu.room}';
+  bool isAhuVisibleToHospital(AhuUnit ahu) {
+    // Default to visible unless explicitly disabled by admin.
+    return _hospitalVisibleAhuKeys.contains(_ahuVisibilityKey(ahu));
+  }
+
+  Future<void> setAhuVisibilityForHospital(AhuUnit ahu, bool isVisible) async {
+    final key = _ahuVisibilityKey(ahu);
+    if (isVisible) {
+      _hospitalVisibleAhuKeys.add(key);
+    } else {
+      _hospitalVisibleAhuKeys.remove(key);
+    }
+    await _saveHospitalVisibility();
+    notifyListeners();
+  }
+
+  Future<void> _saveHospitalVisibility() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(
+        _hospitalVisibleAhuKeysKey,
+        _hospitalVisibleAhuKeys.toList(),
+      );
+    } catch (e) {
+      debugPrint('AppProvider: Error saving AHU visibility: $e');
+    }
+  }
 
   /// Set user role
   void setUserRole(UserRole role) {
@@ -184,9 +229,12 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
     });
 
-    // Listen to telemetry updates - only process if device is registered
+    // Listen to telemetry updates - auto-register devices for multi-AHU discovery.
     _mqttService!.telemetryStream.listen((entry) {
-      if (!_isMatchingAhu(entry.key)) return; // Ignore unregistered devices
+      if (!_isMatchingAhu(entry.key)) {
+        _ensureAhuRegistered(entry.key);
+        _statusData[_extractAhuId(entry.key)] = 'online';
+      }
       final ahuId = _extractAhuId(entry.key);
       _telemetryData[ahuId] = entry.value;
       _debouncedNotify();  // 250ms debounce for RPi
@@ -226,7 +274,7 @@ class AppProvider extends ChangeNotifier {
       final status = entry.value.trim().toLowerCase();
       
       if (status == 'online') {
-        // Device is online - register it (clears any previous device)
+        // Device is online - register if new.
       _ensureAhuRegistered(entry.key);
       _statusData[ahuId] = entry.value;
         _debouncedStateNotify();
@@ -331,9 +379,8 @@ class AppProvider extends ChangeNotifier {
     // Clear any previous data first to start fresh
     clearAllData();
     
-    // Don't pre-register any AHU - let it be auto-discovered from MQTT
-    // Whichever ESP sends messages will be shown
-    debugPrint('AppProvider: Ready for AHU auto-discovery on almed/ahu/#');
+    // Don't pre-register any AHU - let all AHUs be auto-discovered from MQTT.
+    debugPrint('AppProvider: Ready for multi-AHU auto-discovery on almed/ahu/#');
   }
 
   /// Check if message is from currently registered AHU
@@ -355,8 +402,7 @@ class AppProvider extends ChangeNotifier {
     return false;
   }
   
-  /// Auto-discover and register AHU when data arrives
-  /// Only keeps ONE AHU at a time - whichever is actively sending messages
+  /// Auto-discover and register AHU when data arrives.
   void _ensureAhuRegistered(String topicData, {String? site, String? room}) {
     final parts = topicData.split('|');
     final ahuId = parts.isNotEmpty ? parts[0] : topicData;
@@ -371,19 +417,6 @@ class AppProvider extends ChangeNotifier {
       if (ahu.id == ahuId && ahu.site == discoveredSite && ahu.room == discoveredRoom) {
         return; // Already registered, nothing to do
       }
-    }
-    
-    // Clear ALL existing AHUs - we only want ONE at a time
-    // This ensures only the currently active ESP is shown
-    if (_ahuUnits.isNotEmpty) {
-      debugPrint('AppProvider: Switching to new AHU - clearing old data');
-      _ahuUnits.clear();
-      _telemetryData.clear();
-      _stateData.clear();
-      _logData.clear();
-      _statusData.clear();
-      _cachedAhuUnits = null;
-      _ahuUnitsChanged = true;
     }
     
     // Create friendly display name from site and room
@@ -403,6 +436,9 @@ class AppProvider extends ChangeNotifier {
     );
     
     addAhuUnit(newAhu);
+    // New devices are visible to hospital by default.
+    _hospitalVisibleAhuKeys.add(uniqueKey);
+    _saveHospitalVisibility();
     debugPrint('AppProvider: Auto-discovered AHU - $ahuId at $discoveredSite/$discoveredRoom');
   }
 

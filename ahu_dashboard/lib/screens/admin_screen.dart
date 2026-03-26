@@ -266,6 +266,56 @@ class _AdminScreenState extends State<AdminScreen> {
                             ),
                           ),
                           const SizedBox(height: 16),
+                          // Hospital visibility selector
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).cardColor,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Theme.of(context).dividerColor.withOpacity(0.1),
+                              ),
+                            ),
+                            padding: const EdgeInsets.all(20.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.visibility_rounded, color: Theme.of(context).colorScheme.primary),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Hospital Dashboard Visibility',
+                                      style: Theme.of(context).textTheme.titleLarge,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Select which AHU devices are visible to Hospital users.',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                                const SizedBox(height: 14),
+                                ...ahus.map((ahu) {
+                                  final isVisible = provider.isAhuVisibleToHospital(ahu);
+                                  return CheckboxListTile(
+                                    value: isVisible,
+                                    dense: true,
+                                    controlAffinity: ListTileControlAffinity.leading,
+                                    title: Text(ahu.name),
+                                    subtitle: Text('${ahu.site}/${ahu.room} • ${ahu.id}'),
+                                    onChanged: (checked) async {
+                                      await provider.setAhuVisibilityForHospital(ahu, checked ?? true);
+                                      if (!context.mounted) return;
+                                      _showSuccess(
+                                        '${ahu.name} ${checked == true ? "shown" : "hidden"} for Hospital users',
+                                      );
+                                    },
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
 
                           if (selectedAhuId != null) ...[
                             // WiFi Provisioning
