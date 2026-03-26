@@ -1,6 +1,7 @@
 /// Represents an AHU unit in the hospital
 class AhuUnit {
-  final String id;           // e.g., "ahu-01"
+  final String id;           // Internal unique key (e.g., "ahu-01@site/room")
+  final String rawId;        // MQTT AHU topic id segment (e.g., "ahu-01")
   final String name;         // Display name
   final String site;         // Hospital site (e.g., "hospitalA")
   final String room;         // Room location (e.g., "icu1")
@@ -8,14 +9,15 @@ class AhuUnit {
   
   AhuUnit({
     required this.id,
+    String? rawId,
     required this.name,
     required this.site,
     required this.room,
     required this.org,
-  });
+  }) : rawId = rawId ?? id;
 
   /// Get the MQTT base topic for this AHU
-  String get baseTopic => '$org/ahu/$site/$room/$id';
+  String get baseTopic => '$org/ahu/$site/$room/$rawId';
 
   /// Get telemetry topic
   String get telemetryTopic => '$baseTopic/telemetry';
@@ -48,6 +50,7 @@ class AhuUnit {
   factory AhuUnit.fromJson(Map<String, dynamic> json) {
     return AhuUnit(
       id: json['id'] as String,
+      rawId: (json['rawId'] ?? json['id']) as String,
       name: json['name'] as String,
       site: json['site'] as String,
       room: json['room'] as String,
@@ -59,6 +62,7 @@ class AhuUnit {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'rawId': rawId,
       'name': name,
       'site': site,
       'room': room,

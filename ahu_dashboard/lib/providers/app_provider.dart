@@ -165,7 +165,14 @@ class AppProvider extends ChangeNotifier {
   /// Get status for specific AHU
   String? getStatus(String ahuId) => _statusData[ahuId];
 
-  String _ahuVisibilityKey(AhuUnit ahu) => '${ahu.id}@${ahu.site}/${ahu.room}';
+  String _ahuVisibilityKey(AhuUnit ahu) => ahu.id;
+  String _topicToAhuKey(String topicData) {
+    final parts = topicData.split('|');
+    final ahuId = parts.isNotEmpty ? parts[0] : topicData;
+    final site = parts.length > 1 ? parts[1] : 'unknown';
+    final room = parts.length > 2 ? parts[2] : 'unknown';
+    return '$ahuId@$site/$room';
+  }
   bool isAhuVisibleToHospital(AhuUnit ahu) {
     // Default to visible unless explicitly disabled by admin.
     return _hospitalVisibleAhuKeys.contains(_ahuVisibilityKey(ahu));
@@ -302,8 +309,7 @@ class AppProvider extends ChangeNotifier {
   
   /// Extract AHU ID from topic data
   String _extractAhuId(String topicData) {
-    final parts = topicData.split('|');
-    return parts.isNotEmpty ? parts[0] : topicData;
+    return _topicToAhuKey(topicData);
   }
 
   /// Debounced notify to reduce UI rebuilds (optimized for RPi)
@@ -387,19 +393,7 @@ class AppProvider extends ChangeNotifier {
   /// Returns true only if the message matches our active device
   bool _isMatchingAhu(String topicData) {
     if (_ahuUnits.isEmpty) return false; // No device registered yet
-    
-    final parts = topicData.split('|');
-    final ahuId = parts.isNotEmpty ? parts[0] : topicData;
-    final site = parts.length > 1 ? parts[1] : '';
-    final room = parts.length > 2 ? parts[2] : '';
-    
-    // Check if this matches our currently registered AHU
-    for (final ahu in _ahuUnits.values) {
-      if (ahu.id == ahuId && ahu.site == site && ahu.room == room) {
-        return true;
-      }
-    }
-    return false;
+    return _ahuUnits.containsKey(_topicToAhuKey(topicData));
   }
   
   /// Auto-discover and register AHU when data arrives.
@@ -412,11 +406,8 @@ class AppProvider extends ChangeNotifier {
     // Create unique key for this specific AHU (id + site + room combo)
     final uniqueKey = '$ahuId@$discoveredSite/$discoveredRoom';
     
-    // Check if this exact AHU is already registered
-    for (final ahu in _ahuUnits.values) {
-      if (ahu.id == ahuId && ahu.site == discoveredSite && ahu.room == discoveredRoom) {
-        return; // Already registered, nothing to do
-      }
+    if (_ahuUnits.containsKey(uniqueKey)) {
+      return; // Already registered, nothing to do
     }
     
     // Create friendly display name from site and room
@@ -428,7 +419,8 @@ class AppProvider extends ChangeNotifier {
     }
     
     final newAhu = AhuUnit(
-      id: ahuId,
+      id: uniqueKey,
+      rawId: ahuId,
       name: friendlyName,
       site: discoveredSite,
       room: discoveredRoom,
