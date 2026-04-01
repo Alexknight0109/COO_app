@@ -289,9 +289,11 @@ class MqttService {
     };
     if (!supportedKinds.contains(kind)) return;
 
-    final ahuId = parts[4];
-    final site = parts.length > 2 ? parts[2] : 'hospitalA';
-    final room = parts.length > 3 ? parts[3] : 'room1';
+    // Parse from the tail so topics stay valid even when SITE contains '/'.
+    final ahuId = parts[parts.length - 2];
+    final room = parts[parts.length - 3];
+    final siteParts = parts.sublist(2, parts.length - 3);
+    final site = siteParts.isNotEmpty ? siteParts.join('/') : 'hospitalA';
     final topicData = '$ahuId|$site|$room';
     final now = DateTime.now().millisecondsSinceEpoch;
 
