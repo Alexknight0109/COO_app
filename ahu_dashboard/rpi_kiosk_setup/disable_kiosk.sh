@@ -24,6 +24,7 @@ USER_HOME="/home/$ACTUAL_USER"
 
 # Remove autostart entry
 rm -f "$USER_HOME/.config/autostart/almed-kiosk.desktop"
+rm -f "$USER_HOME/.config/autostart/light-locker.desktop"
 echo "  ✓ Autostart removed"
 
 # Restore original boot config

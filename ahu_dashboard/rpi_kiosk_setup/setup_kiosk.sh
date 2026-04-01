@@ -297,6 +297,18 @@ Section "ServerFlags"
 EndSection
 EOF
 
+# Prevent light-locker from requesting desktop password after wake.
+USER_AUTOSTART_DIR="$USER_HOME/.config/autostart"
+mkdir -p "$USER_AUTOSTART_DIR"
+cat > "$USER_AUTOSTART_DIR/light-locker.desktop" << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=Light Locker
+Hidden=true
+X-GNOME-Autostart-enabled=false
+EOF
+chown "$ACTUAL_USER:$ACTUAL_USER" "$USER_AUTOSTART_DIR/light-locker.desktop"
+
 echo "  ✓ Desktop configured"
 
 # =============================================================================

@@ -19,6 +19,12 @@ export DISPLAY=:0
 xset s off 2>/dev/null || true
 xset -dpms 2>/dev/null || true
 xset s noblank 2>/dev/null || true
+xset s 0 0 2>/dev/null || true
+xset dpms 0 0 0 2>/dev/null || true
+
+# Ensure desktop lockers are not active in kiosk mode.
+pkill light-locker 2>/dev/null || true
+pkill xscreensaver 2>/dev/null || true
 
 # Hide mouse cursor after 3 seconds of inactivity
 pkill unclutter 2>/dev/null || true

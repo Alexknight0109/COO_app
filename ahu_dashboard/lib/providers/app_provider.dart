@@ -13,29 +13,37 @@ class AppProvider extends ChangeNotifier {
   Timer? _debounceTimer;
   Timer? _stateDebounceTimer;
   MqttService? _mqttService;
+  StreamSubscription<bool>? _connectionSubscription;
+  StreamSubscription<MapEntry<String, AhuTelemetry>>? _telemetrySubscription;
+  StreamSubscription<MapEntry<String, AhuState>>? _stateSubscription;
+  StreamSubscription<MapEntry<String, AhuLog>>? _logSubscription;
+  StreamSubscription<MapEntry<String, String>>? _statusSubscription;
+  StreamSubscription<MapEntry<String, bool>>? _awsStatusSubscription;
   UserRole? _currentRole;
   final Map<String, AhuUnit> _ahuUnits = {};
   final Map<String, AhuTelemetry> _telemetryData = {};
   final Map<String, AhuState> _stateData = {};
   final Map<String, List<AhuLog>> _logData = {};
   final Map<String, String> _statusData = {};
-  final Map<String, bool> _awsStatusData = {};  // AWS cloud connection status per AHU
+  final Map<String, bool> _awsStatusData =
+      {}; // AWS cloud connection status per AHU
+  final Map<String, DateTime> _lastSeenData = {};
   final Set<String> _hospitalVisibleAhuKeys = {};
   final Set<String> _hospitalHiddenAhuKeys = {};
   bool _isConnected = false;
-  
+
   // Cache for frequently accessed data
   List<AhuUnit>? _cachedAhuUnits;
   bool _ahuUnitsChanged = true;
-  
+
   // RPi Performance: Track if updates are pending to batch notifications
   bool _hasPendingUpdates = false;
   DateTime _lastNotify = DateTime.now();
-  
+
   // Screen Lock feature - blocks temp/humidity changes when locked
   // Lock state persists across restarts - can only unlock with passcode
-  bool _isScreenLocked = true;  // Default to locked on startup
-  String _screenLockPasscode = '123123';  // Default passcode
+  bool _isScreenLocked = false; // Default to unlocked on startup
+  String _screenLockPasscode = '123123'; // Default passcode
   static const String _passcodeKey = 'screen_lock_passcode';
   static const String _lockStateKey = 'screen_lock_state';
   static const String _hospitalVisibleAhuKeysKey = 'hospital_visible_ahu_keys';
@@ -46,19 +54,21 @@ class AppProvider extends ChangeNotifier {
   bool get isConnected => _isConnected;
   MqttService? get mqttService => _mqttService;
   bool get isScreenLocked => _isScreenLocked;
-  
+
   /// Initialize and load saved passcode and lock state
   Future<void> loadScreenLockPasscode() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       _screenLockPasscode = prefs.getString(_passcodeKey) ?? '123123';
-      // Load lock state - defaults to true (locked) if not saved
-      _isScreenLocked = prefs.getBool(_lockStateKey) ?? true;
-      final savedVisibleKeys = prefs.getStringList(_hospitalVisibleAhuKeysKey) ?? const [];
+      // Load lock state - defaults to false (unlocked) if not saved.
+      _isScreenLocked = prefs.getBool(_lockStateKey) ?? false;
+      final savedVisibleKeys =
+          prefs.getStringList(_hospitalVisibleAhuKeysKey) ?? const [];
       _hospitalVisibleAhuKeys
         ..clear()
         ..addAll(savedVisibleKeys);
-      final savedHiddenKeys = prefs.getStringList(_hospitalHiddenAhuKeysKey) ?? const [];
+      final savedHiddenKeys =
+          prefs.getStringList(_hospitalHiddenAhuKeysKey) ?? const [];
       _hospitalHiddenAhuKeys
         ..clear()
         ..addAll(savedHiddenKeys);
@@ -69,15 +79,16 @@ class AppProvider extends ChangeNotifier {
       _isScreenLocked = true; // Default to locked on error
     }
   }
-  
+
   /// Toggle screen lock state
   void toggleScreenLock() {
     _isScreenLocked = !_isScreenLocked;
     _saveLockState();
-    debugPrint('AppProvider: Screen ${_isScreenLocked ? "LOCKED" : "UNLOCKED"}');
+    debugPrint(
+        'AppProvider: Screen ${_isScreenLocked ? "LOCKED" : "UNLOCKED"}');
     notifyListeners();
   }
-  
+
   /// Lock the screen
   void lockScreen() {
     _isScreenLocked = true;
@@ -85,7 +96,7 @@ class AppProvider extends ChangeNotifier {
     debugPrint('AppProvider: Screen LOCKED');
     notifyListeners();
   }
-  
+
   /// Unlock screen with passcode verification
   bool unlockScreen(String passcode) {
     if (passcode == _screenLockPasscode) {
@@ -98,7 +109,16 @@ class AppProvider extends ChangeNotifier {
     debugPrint('AppProvider: Unlock failed - wrong passcode');
     return false;
   }
-  
+
+  /// Unlock screen after device wake so kiosk resume is frictionless.
+  void unlockScreenAfterWake() {
+    if (!_isScreenLocked) return;
+    _isScreenLocked = false;
+    _saveLockState();
+    debugPrint('AppProvider: Screen UNLOCKED after wake');
+    notifyListeners();
+  }
+
   /// Save lock state to SharedPreferences
   Future<void> _saveLockState() async {
     try {
@@ -109,19 +129,21 @@ class AppProvider extends ChangeNotifier {
       debugPrint('AppProvider: Error saving lock state: $e');
     }
   }
-  
+
   /// Change the screen lock passcode
-  Future<bool> changeScreenLockPasscode(String currentPasscode, String newPasscode) async {
+  Future<bool> changeScreenLockPasscode(
+      String currentPasscode, String newPasscode) async {
     if (currentPasscode != _screenLockPasscode) {
-      debugPrint('AppProvider: Passcode change failed - wrong current passcode');
+      debugPrint(
+          'AppProvider: Passcode change failed - wrong current passcode');
       return false;
     }
-    
+
     if (newPasscode.length != 6) {
       debugPrint('AppProvider: Passcode change failed - must be 6 digits');
       return false;
     }
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_passcodeKey, newPasscode);
@@ -133,13 +155,13 @@ class AppProvider extends ChangeNotifier {
       return false;
     }
   }
-  
+
   /// Get current passcode (for admin settings display)
   String get currentPasscode => _screenLockPasscode;
-  
+
   /// Get AWS cloud connection status for specific AHU
   bool isAwsConnected(String ahuId) => _awsStatusData[ahuId] ?? false;
-  
+
   /// Get AHU units list with caching
   List<AhuUnit> get ahuUnits {
     if (_ahuUnitsChanged || _cachedAhuUnits == null) {
@@ -157,7 +179,8 @@ class AppProvider extends ChangeNotifier {
     return units.where((ahu) => isAhuVisibleToHospital(ahu)).toList();
   }
 
-  Set<String> get hospitalVisibleAhuKeys => Set.unmodifiable(_hospitalVisibleAhuKeys);
+  Set<String> get hospitalVisibleAhuKeys =>
+      Set.unmodifiable(_hospitalVisibleAhuKeys);
 
   /// Get telemetry for specific AHU
   AhuTelemetry? getTelemetry(String ahuId) => _telemetryData[ahuId];
@@ -179,6 +202,7 @@ class AppProvider extends ChangeNotifier {
     final room = parts.length > 2 ? parts[2] : 'unknown';
     return '$ahuId@$site/$room';
   }
+
   bool isAhuVisibleToHospital(AhuUnit ahu) {
     // Default to visible unless explicitly hidden by admin.
     return !_hospitalHiddenAhuKeys.contains(_ahuVisibilityKey(ahu));
@@ -228,97 +252,111 @@ class AppProvider extends ChangeNotifier {
     String? username,
     String? password,
   }) async {
-    // Dashboard runs on RPi - connect to local MQTT broker
-    // Single WiFi mode: Both ESP32 and RPi connect to "AlMed" network
-    final defaultBroker = broker ?? 'localhost';
-    
+    _cancelMqttSubscriptions();
+    _mqttService?.dispose();
+
+    // Web dashboard must use broker host reachable by browser and typically WS port.
+    final defaultBroker = broker ?? (kIsWeb ? Uri.base.host : 'localhost');
+    final defaultPort = port ?? (kIsWeb ? 9001 : 1883);
+
     _mqttService = MqttService(
       broker: defaultBroker,
-      port: port ?? 1883,
+      port: defaultPort,
       username: username ?? 'almed',
       password: password ?? 'Almed1234\$',
       useTLS: false,
     );
-    
-    debugPrint('AppProvider: Initializing MQTT - Connecting to local broker at $defaultBroker:${port ?? 1883}');
+
+    debugPrint(
+        'AppProvider: Initializing MQTT - Connecting to broker at $defaultBroker:$defaultPort');
 
     // Listen to connection status
-    _mqttService!.connectionStream.listen((connected) {
+    _connectionSubscription =
+        _mqttService!.connectionStream.listen((connected) {
       _isConnected = connected;
       notifyListeners();
     });
 
     // Listen to telemetry updates - auto-register devices for multi-AHU discovery.
-    _mqttService!.telemetryStream.listen((entry) {
+    _telemetrySubscription = _mqttService!.telemetryStream.listen((entry) {
+      final ahuId = _extractAhuId(entry.key);
       if (!_isMatchingAhu(entry.key)) {
         _ensureAhuRegistered(entry.key);
-        _statusData[_extractAhuId(entry.key)] = 'online';
       }
-      final ahuId = _extractAhuId(entry.key);
+      _statusData[ahuId] = 'online';
+      _lastSeenData[ahuId] = DateTime.now();
       _telemetryData[ahuId] = entry.value;
-      _debouncedNotify();  // 250ms debounce for RPi
+      _debouncedNotify(); // 250ms debounce for RPi
     });
 
     // Listen to state updates - auto-register devices that send state (dynamic discovery)
-    _mqttService!.stateStream.listen((entry) {
+    _stateSubscription = _mqttService!.stateStream.listen((entry) {
+      final ahuId = _extractAhuId(entry.key);
       // Auto-register AHU if we receive state data (fallback for status topic issues)
       if (!_isMatchingAhu(entry.key)) {
         debugPrint('AppProvider: Auto-registering AHU from state message');
         _ensureAhuRegistered(entry.key);
-        _statusData[_extractAhuId(entry.key)] = 'online';  // Mark as online since we got data
       }
-      final ahuId = _extractAhuId(entry.key);
+      _statusData[ahuId] = 'online'; // State traffic means device is alive.
+      _lastSeenData[ahuId] = DateTime.now();
       _stateData[ahuId] = entry.value;
-      _debouncedStateNotify();  // Debounced for RPi performance
+      _debouncedStateNotify(); // Debounced for RPi performance
     });
 
     // Listen to log updates - only process if device is registered
-    _mqttService!.logStream.listen((entry) {
+    _logSubscription = _mqttService!.logStream.listen((entry) {
       if (!_isMatchingAhu(entry.key)) return; // Ignore unregistered devices
       final ahuId = _extractAhuId(entry.key);
-      
+
       final logs = _logData.putIfAbsent(ahuId, () => []);
       logs.add(entry.value);
-      
+
       // Keep only last 70 logs - FIFO (oldest gets deleted as new ones arrive)
       while (logs.length > 70) {
         logs.removeAt(0);
       }
-      _debouncedNotify();  // Debounced for RPi
+      _debouncedNotify(); // Debounced for RPi
     });
 
     // Listen to status updates - only register ONLINE devices (dynamic discovery)
-    _mqttService!.statusStream.listen((entry) {
+    _statusSubscription = _mqttService!.statusStream.listen((entry) {
       final ahuId = _extractAhuId(entry.key);
       final status = entry.value.trim().toLowerCase();
-      
+
       if (status == 'online') {
         // Device is online - register if new.
-      _ensureAhuRegistered(entry.key);
-      _statusData[ahuId] = entry.value;
+        _ensureAhuRegistered(entry.key);
+        _statusData[ahuId] = status;
+        _lastSeenData[ahuId] = DateTime.now();
         _debouncedStateNotify();
       } else if (status == 'offline') {
-        // Device went offline - just update status if registered, don't register new
+        // Ignore stale/off-cycle offline blips when fresh telemetry/state is still flowing.
+        final lastSeen = _lastSeenData[ahuId];
+        final recentlySeen = lastSeen != null &&
+            DateTime.now().difference(lastSeen) < const Duration(seconds: 30);
+        if (recentlySeen) return;
+        // Device went offline - just update status if registered, don't register new.
         if (_isMatchingAhu(entry.key)) {
-          _statusData[ahuId] = entry.value;
+          _statusData[ahuId] = status;
           _debouncedStateNotify();
         }
       }
     });
 
     // Listen to AWS connection status updates
-    _mqttService!.awsStatusStream.listen((entry) {
-      if (!_isMatchingAhu(entry.key)) return;  // Only process registered devices
+    _awsStatusSubscription = _mqttService!.awsStatusStream.listen((entry) {
+      if (!_isMatchingAhu(entry.key)) return; // Only process registered devices
       final ahuId = _extractAhuId(entry.key);
       _awsStatusData[ahuId] = entry.value;
-      debugPrint('AppProvider: AWS status for $ahuId: ${entry.value ? "CONNECTED" : "DISCONNECTED"}');
-      _debouncedStateNotify();  // Debounced for RPi
+      debugPrint(
+          'AppProvider: AWS status for $ahuId: ${entry.value ? "CONNECTED" : "DISCONNECTED"}');
+      _debouncedStateNotify(); // Debounced for RPi
     });
 
     final connected = await _mqttService!.connect();
     return connected;
   }
-  
+
   /// Extract AHU ID from topic data
   String _extractAhuId(String topicData) {
     return _topicToAhuKey(topicData);
@@ -337,7 +375,7 @@ class AppProvider extends ChangeNotifier {
       }
     });
   }
-  
+
   /// Debounced state notify (for critical state changes)
   void _debouncedStateNotify() {
     _stateDebounceTimer?.cancel();
@@ -347,7 +385,7 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
     });
   }
-  
+
   /// Throttled notify - ensures minimum time between notifications
   void _throttledNotify() {
     final now = DateTime.now();
@@ -374,6 +412,7 @@ class AppProvider extends ChangeNotifier {
     _stateData.remove(ahuId);
     _logData.remove(ahuId);
     _statusData.remove(ahuId);
+    _lastSeenData.remove(ahuId);
     _ahuUnitsChanged = true;
     notifyListeners();
   }
@@ -386,7 +425,8 @@ class AppProvider extends ChangeNotifier {
     _stateData.clear();
     _logData.clear();
     _statusData.clear();
-    _awsStatusData.clear();  // Also clear AWS status
+    _lastSeenData.clear();
+    _awsStatusData.clear(); // Also clear AWS status
     _cachedAhuUnits = null;
     _ahuUnitsChanged = true;
     notifyListeners();
@@ -396,9 +436,10 @@ class AppProvider extends ChangeNotifier {
   void loadDefaultAhus() {
     // Clear any previous data first to start fresh
     clearAllData();
-    
+
     // Don't pre-register any AHU - let all AHUs be auto-discovered from MQTT.
-    debugPrint('AppProvider: Ready for multi-AHU auto-discovery on almed/ahu/#');
+    debugPrint(
+        'AppProvider: Ready for multi-AHU auto-discovery on almed/ahu/#');
   }
 
   /// Check if message is from currently registered AHU
@@ -407,21 +448,21 @@ class AppProvider extends ChangeNotifier {
     if (_ahuUnits.isEmpty) return false; // No device registered yet
     return _ahuUnits.containsKey(_topicToAhuKey(topicData));
   }
-  
+
   /// Auto-discover and register AHU when data arrives.
   void _ensureAhuRegistered(String topicData, {String? site, String? room}) {
     final parts = topicData.split('|');
     final ahuId = parts.isNotEmpty ? parts[0] : topicData;
     final discoveredSite = parts.length > 1 ? parts[1] : (site ?? 'unknown');
     final discoveredRoom = parts.length > 2 ? parts[2] : (room ?? 'unknown');
-    
+
     // Create unique key for this specific AHU (id + site + room combo)
     final uniqueKey = '$ahuId@$discoveredSite/$discoveredRoom';
-    
+
     if (_ahuUnits.containsKey(uniqueKey)) {
       return; // Already registered, nothing to do
     }
-    
+
     // Create friendly display name from site and room
     String friendlyName = discoveredRoom.replaceAll('_', ' ');
     if (discoveredSite.isNotEmpty && discoveredSite != 'unknown') {
@@ -429,7 +470,7 @@ class AppProvider extends ChangeNotifier {
       final roomName = discoveredRoom.replaceAll('_', ' ');
       friendlyName = '$siteName - $roomName';
     }
-    
+
     final newAhu = AhuUnit(
       id: uniqueKey,
       rawId: ahuId,
@@ -438,11 +479,12 @@ class AppProvider extends ChangeNotifier {
       room: discoveredRoom,
       org: 'almed',
     );
-    
+
     addAhuUnit(newAhu);
     // Keep current visibility decision intact; new keys default to visible.
     _saveHospitalVisibility();
-    debugPrint('AppProvider: Auto-discovered AHU - $ahuId at $discoveredSite/$discoveredRoom');
+    debugPrint(
+        'AppProvider: Auto-discovered AHU - $ahuId at $discoveredSite/$discoveredRoom');
   }
 
   /// Check if MQTT is ready for commands
@@ -483,7 +525,8 @@ class AppProvider extends ChangeNotifier {
   /// Toggle AHU
   bool toggleAhu(String ahuId) {
     if (!canSendCommands) {
-      debugPrint('AppProvider: Cannot send toggle command - MQTT not connected');
+      debugPrint(
+          'AppProvider: Cannot send toggle command - MQTT not connected');
       return false;
     }
     final ahu = _ahuUnits[ahuId];
@@ -499,13 +542,15 @@ class AppProvider extends ChangeNotifier {
   /// Set temperature setpoint
   bool setTemperature(String ahuId, double temp) {
     if (!canSendCommands) {
-      debugPrint('AppProvider: Cannot send temperature command - MQTT not connected');
+      debugPrint(
+          'AppProvider: Cannot send temperature command - MQTT not connected');
       return false;
     }
     final ahu = _ahuUnits[ahuId];
     if (ahu != null) {
       _mqttService!.setTemperature(ahu, temp);
-      debugPrint('AppProvider: Temperature command ($temp) sent to ${ahu.cmdTopic}');
+      debugPrint(
+          'AppProvider: Temperature command ($temp) sent to ${ahu.cmdTopic}');
       return true;
     }
     debugPrint('AppProvider: AHU $ahuId not found');
@@ -515,13 +560,15 @@ class AppProvider extends ChangeNotifier {
   /// Set humidity setpoint
   bool setHumidity(String ahuId, double humidity) {
     if (!canSendCommands) {
-      debugPrint('AppProvider: Cannot send humidity command - MQTT not connected');
+      debugPrint(
+          'AppProvider: Cannot send humidity command - MQTT not connected');
       return false;
     }
     final ahu = _ahuUnits[ahuId];
     if (ahu != null) {
       _mqttService!.setHumidity(ahu, humidity);
-      debugPrint('AppProvider: Humidity command ($humidity) sent to ${ahu.cmdTopic}');
+      debugPrint(
+          'AppProvider: Humidity command ($humidity) sent to ${ahu.cmdTopic}');
       return true;
     }
     debugPrint('AppProvider: AHU $ahuId not found');
@@ -531,13 +578,15 @@ class AppProvider extends ChangeNotifier {
   /// Set fan speed (0=OFF, 1=LOW, 2=MED, 3=HIGH)
   bool setFanSpeed(String ahuId, int speed) {
     if (!canSendCommands) {
-      debugPrint('AppProvider: Cannot send fan speed command - MQTT not connected');
+      debugPrint(
+          'AppProvider: Cannot send fan speed command - MQTT not connected');
       return false;
     }
     final ahu = _ahuUnits[ahuId];
     if (ahu != null) {
       _mqttService!.setFanSpeed(ahu, speed);
-      debugPrint('AppProvider: Fan speed command ($speed) sent to ${ahu.cmdTopic}');
+      debugPrint(
+          'AppProvider: Fan speed command ($speed) sent to ${ahu.cmdTopic}');
       return true;
     }
     debugPrint('AppProvider: AHU $ahuId not found');
@@ -547,7 +596,8 @@ class AppProvider extends ChangeNotifier {
   /// Toggle fan speed
   bool toggleFanSpeed(String ahuId) {
     if (!canSendCommands) {
-      debugPrint('AppProvider: Cannot send fan toggle command - MQTT not connected');
+      debugPrint(
+          'AppProvider: Cannot send fan toggle command - MQTT not connected');
       return false;
     }
     final ahu = _ahuUnits[ahuId];
@@ -570,7 +620,8 @@ class AppProvider extends ChangeNotifier {
     final ahu = _ahuUnits[ahuId];
     if (ahu != null) {
       _mqttService!.setMode(ahu, onlineMode);
-      debugPrint('AppProvider: Mode command (${onlineMode ? 'online' : 'offline'}) sent to ${ahu.cmdTopic}');
+      debugPrint(
+          'AppProvider: Mode command (${onlineMode ? 'online' : 'offline'}) sent to ${ahu.cmdTopic}');
       return true;
     }
     debugPrint('AppProvider: AHU $ahuId not found');
@@ -580,13 +631,15 @@ class AppProvider extends ChangeNotifier {
   /// Set CP mode (dual or single) - Available to all users
   bool setCpMode(String ahuId, String mode) {
     if (!canSendCommands) {
-      debugPrint('AppProvider: Cannot send CP mode command - MQTT not connected');
+      debugPrint(
+          'AppProvider: Cannot send CP mode command - MQTT not connected');
       return false;
     }
     final ahu = _ahuUnits[ahuId];
     if (ahu != null) {
       _mqttService!.setCpMode(ahu, mode);
-      debugPrint('AppProvider: CP mode command ($mode) sent to ${ahu.cmdTopic}');
+      debugPrint(
+          'AppProvider: CP mode command ($mode) sent to ${ahu.cmdTopic}');
       return true;
     }
     debugPrint('AppProvider: AHU $ahuId not found');
@@ -596,13 +649,15 @@ class AppProvider extends ChangeNotifier {
   /// Set active CP (1 or 2) - Available to all users
   bool setCpActive(String ahuId, int cpActive) {
     if (!canSendCommands) {
-      debugPrint('AppProvider: Cannot send CP active command - MQTT not connected');
+      debugPrint(
+          'AppProvider: Cannot send CP active command - MQTT not connected');
       return false;
     }
     final ahu = _ahuUnits[ahuId];
     if (ahu != null) {
       _mqttService!.setCpActive(ahu, cpActive);
-      debugPrint('AppProvider: CP active command ($cpActive) sent to ${ahu.cmdTopic}');
+      debugPrint(
+          'AppProvider: CP active command ($cpActive) sent to ${ahu.cmdTopic}');
       return true;
     }
     debugPrint('AppProvider: AHU $ahuId not found');
@@ -657,7 +712,8 @@ class AppProvider extends ChangeNotifier {
   }
 
   /// Provision motor timings (admin only)
-  void provisionMotorTimings(String ahuId, {
+  void provisionMotorTimings(
+    String ahuId, {
     int? m1Start,
     int? m1Post,
     int? m2Interval,
@@ -670,9 +726,10 @@ class AppProvider extends ChangeNotifier {
       final waitTime = m2Interval ?? 30;
       final m2RunTime = m2Run ?? 10;
       final actualInterval = waitTime + m2RunTime;
-      
-      debugPrint('AppProvider: M2 Interval calculation - Wait: ${waitTime}s + Run: ${m2RunTime}s = Actual: ${actualInterval}s');
-      
+
+      debugPrint(
+          'AppProvider: M2 Interval calculation - Wait: ${waitTime}s + Run: ${m2RunTime}s = Actual: ${actualInterval}s');
+
       _mqttService?.provisionMotorTimings(
         ahu,
         m1Start: m1Start,
@@ -688,7 +745,23 @@ class AppProvider extends ChangeNotifier {
   void dispose() {
     _debounceTimer?.cancel();
     _stateDebounceTimer?.cancel();
+    _cancelMqttSubscriptions();
     _mqttService?.dispose();
     super.dispose();
+  }
+
+  void _cancelMqttSubscriptions() {
+    _connectionSubscription?.cancel();
+    _telemetrySubscription?.cancel();
+    _stateSubscription?.cancel();
+    _logSubscription?.cancel();
+    _statusSubscription?.cancel();
+    _awsStatusSubscription?.cancel();
+    _connectionSubscription = null;
+    _telemetrySubscription = null;
+    _stateSubscription = null;
+    _logSubscription = null;
+    _statusSubscription = null;
+    _awsStatusSubscription = null;
   }
 }

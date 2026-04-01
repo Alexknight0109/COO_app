@@ -11,6 +11,7 @@ import '../models/ahu_unit.dart';
 /// MQTT service for communicating with ESP32 AHU units
 class MqttService {
   MqttServerClient? _client;
+  StreamSubscription<List<MqttReceivedMessage<MqttMessage>>>? _updatesSubscription;
   final String broker;
   final int port;
   final String username;
@@ -34,6 +35,7 @@ class MqttService {
   Stream<MapEntry<String, bool>> get awsStatusStream => _awsStatusController.stream;
 
   bool _isConnected = false;
+  bool _rootSubscribed = false;
   bool get isConnected => _isConnected;
 
   MqttService({
@@ -48,8 +50,8 @@ class MqttService {
   Future<bool> connect() async {
     try {
       final clientId = 'ahu_dashboard_${DateTime.now().millisecondsSinceEpoch}';
-      _client = MqttServerClient(broker, clientId)
-        ..port = port
+      _updatesSubscription?.cancel();
+      _client = MqttServerClient.withPort(broker, clientId, port)
         ..logging(on: false)
         ..keepAlivePeriod = 60
         ..connectTimeoutPeriod = 3000  // 3 second timeout - don't block UI
@@ -59,6 +61,12 @@ class MqttService {
         ..pongCallback = _pong
         ..autoReconnect = true  // Auto-reconnect in background
         ..resubscribeOnAutoReconnect = true;
+
+      if (kIsWeb) {
+        _client!
+          ..useWebSocket = true
+          ..websocketProtocols = MqttClientConstants.protocolsSingleDefault;
+      }
 
       if (useTLS) {
         _client!.secure = true;
@@ -84,11 +92,11 @@ class MqttService {
       if (_client!.connectionStatus!.state == MqttConnectionState.connected) {
         debugPrint('MQTT: Connected to $broker:$port ${useTLS ? "(TLS)" : ""}');
         _isConnected = true;
+        _rootSubscribed = false;
         _connectionController.add(true);
 
-        // Subscribe to all AHU topics - auto-discover any ESP that connects
-        _client!.subscribe('almed/ahu/#', MqttQos.atLeastOnce);
-        _client!.updates!.listen(_onMessage);
+        _subscribeRootTopics();
+        _updatesSubscription = _client!.updates!.listen(_onMessage);
 
         return true;
       } else {
@@ -112,13 +120,9 @@ class MqttService {
 
   /// Subscribe to specific AHU topics
   void subscribeToAhu(AhuUnit ahu) {
+    // Root wildcard subscription already covers all AHU topics.
     if (_client == null || !_isConnected) return;
-
-    _client!.subscribe(ahu.telemetryTopic, MqttQos.atLeastOnce);
-    _client!.subscribe(ahu.stateTopic, MqttQos.atLeastOnce);
-    _client!.subscribe(ahu.logTopic, MqttQos.atLeastOnce);
-    _client!.subscribe(ahu.statusTopic, MqttQos.atLeastOnce);
-    _client!.subscribe(ahu.provAckTopic, MqttQos.atLeastOnce);
+    _subscribeRootTopics();
   }
 
   /// Send command to AHU
@@ -240,12 +244,14 @@ class MqttService {
   void _onConnected() {
     debugPrint('MQTT: Connected');
     _isConnected = true;
+    _subscribeRootTopics();
     _connectionController.add(true);
   }
 
   void _onDisconnected() {
     debugPrint('MQTT: Disconnected');
     _isConnected = false;
+    _rootSubscribed = false;
     _connectionController.add(false);
   }
 
@@ -269,8 +275,19 @@ class MqttService {
     final payloadString = MqttPublishPayload.bytesToStringAsString(payload.payload.message);
 
     // Extract AHU info for logging
+    if (!topic.startsWith('almed/ahu/')) return;
     final parts = topic.split('/');
-    if (parts.length < 5) return;
+    if (parts.length < 6) return;
+
+    final kind = parts.last;
+    const supportedKinds = {
+      'telemetry',
+      'state',
+      'log',
+      'status',
+      'aws_status',
+    };
+    if (!supportedKinds.contains(kind)) return;
 
     final ahuId = parts[4];
     final site = parts.length > 2 ? parts[2] : 'hospitalA';
@@ -377,11 +394,18 @@ class MqttService {
   /// Dispose resources
   void dispose() {
     disconnect();
+    _updatesSubscription?.cancel();
     _telemetryController.close();
     _stateController.close();
     _logController.close();
     _statusController.close();
     _connectionController.close();
     _awsStatusController.close();
+  }
+
+  void _subscribeRootTopics() {
+    if (_client == null || !_isConnected || _rootSubscribed) return;
+    _client!.subscribe('almed/ahu/#', MqttQos.atLeastOnce);
+    _rootSubscribed = true;
   }
 }

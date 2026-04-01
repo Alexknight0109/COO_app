@@ -22,29 +22,29 @@ bool get isRaspberryPi {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // RPi Performance: Disable debug painting and checkerboards
   debugPaintSizeEnabled = false;
   debugPaintBaselinesEnabled = false;
   debugPaintLayerBordersEnabled = false;
   debugRepaintRainbowEnabled = false;
-  
+
   // Enable fullscreen mode on launch
   SystemChrome.setEnabledSystemUIMode(
     SystemUiMode.immersiveSticky,
     overlays: [], // Hide all system UI overlays
   );
-  
+
   // Set preferred orientations (optional - can be removed if rotation is needed)
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
-  
+
   // Pre-load screen lock state before app starts
   final appProvider = AppProvider();
   await appProvider.loadScreenLockPasscode();
-  
+
   runApp(AhuDashboardApp(appProvider: appProvider));
 }
 
@@ -55,14 +55,15 @@ void main() async {
 class TouchFriendlyScrollBehavior extends MaterialScrollBehavior {
   @override
   Set<PointerDeviceKind> get dragDevices => {
-    PointerDeviceKind.touch,
-    PointerDeviceKind.mouse,
-    PointerDeviceKind.stylus,
-    PointerDeviceKind.unknown,
-  };
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.unknown,
+      };
 
   @override
-  Widget buildScrollbar(BuildContext context, Widget child, ScrollableDetails details) {
+  Widget buildScrollbar(
+      BuildContext context, Widget child, ScrollableDetails details) {
     // Return child directly without wrapping in Scrollbar - hides scrollbar completely
     return child;
   }
@@ -74,17 +75,52 @@ class TouchFriendlyScrollBehavior extends MaterialScrollBehavior {
   }
 }
 
-class AhuDashboardApp extends StatelessWidget {
+class AhuDashboardApp extends StatefulWidget {
   final AppProvider appProvider;
-  
+
   const AhuDashboardApp({super.key, required this.appProvider});
+
+  @override
+  State<AhuDashboardApp> createState() => _AhuDashboardAppState();
+}
+
+class _AhuDashboardAppState extends State<AhuDashboardApp>
+    with WidgetsBindingObserver {
+  bool _sawBackgroundState = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      _sawBackgroundState = true;
+      return;
+    }
+
+    if (state == AppLifecycleState.resumed && _sawBackgroundState) {
+      _sawBackgroundState = false;
+      widget.appProvider.unlockScreenAfterWake();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         // Use pre-loaded provider with lock state already initialized
-        ChangeNotifierProvider.value(value: appProvider),
+        ChangeNotifierProvider.value(value: widget.appProvider),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: Consumer<ThemeProvider>(
