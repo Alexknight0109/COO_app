@@ -11,11 +11,28 @@ LOG_FILE="/tmp/almed_kiosk.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "=== ALMED Kiosk Starting: $(date) ==="
 
-# Wait for desktop to fully load
-sleep 5
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# App lives next to rpi_kiosk_setup (works on Radxa, Pi, any install path).
+APP_PATH="${ALMED_APP_PATH:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+
+# Wait for desktop compositor (Radxa KDE can be slower on cold boot).
+sleep "${ALMED_KIOSK_BOOT_DELAY:-10}"
 
 # Disable screen blanking and power management
 export DISPLAY=:0
+
+# Force panel resolution before the Flutter app starts (fixes tiny UI on Radxa).
+if [ -f "$SCRIPT_DIR/configure_display.sh" ]; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/configure_display.sh"
+else
+    # Fallback when configure_display.sh is not deployed yet.
+    xrandr --output "${ALMED_DISPLAY_OUTPUT:-HDMI-1}" \
+        --mode "${ALMED_DISPLAY_WIDTH:-1024}x${ALMED_DISPLAY_HEIGHT:-600}" \
+        2>/dev/null || true
+fi
+
 xset s off 2>/dev/null || true
 xset -dpms 2>/dev/null || true
 xset s noblank 2>/dev/null || true
@@ -33,8 +50,7 @@ unclutter -idle 3 -root &
 # Hide the taskbar/panel for cleaner kiosk look (optional)
 # lxpanelctl command hide 2>/dev/null || true
 
-# Path to the Flutter app
-APP_PATH="/home/almed/Documents/almed_ahu/ahu_dashboard"
+echo "APP_PATH=$APP_PATH"
 
 # Try release build first, then debug
 RELEASE_BUNDLE="$APP_PATH/build/linux/arm64/release/bundle"

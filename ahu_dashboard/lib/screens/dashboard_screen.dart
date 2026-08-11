@@ -83,7 +83,7 @@ class _DashboardTopBar extends StatelessWidget {
             'ALMED',
             style: TextStyle(
               fontFamily: 'Verdana',
-              fontSize: isSmallScreen ? 18 : 24,
+              fontSize: isSmallScreen ? 22 : 26,
               fontWeight: FontWeight.w600,
               color: isDark ? Colors.white : Colors.black,
               letterSpacing: 1.5,
@@ -104,7 +104,7 @@ class _DashboardTopBar extends StatelessWidget {
                 Text(
                   'Dashboard',
                   style: theme.textTheme.displayLarge?.copyWith(
-                    fontSize: isSmallScreen ? 20 : 28,
+                    fontSize: isSmallScreen ? 24 : 30,
                   ),
                 ),
                 if (!isSmallScreen) ...[
@@ -196,12 +196,12 @@ class _ActionButton extends StatelessWidget {
         ),
       ),
       child: IconButton(
-        icon: Icon(icon, size: isSmall ? 18 : 24),
-        iconSize: isSmall ? 18 : 24,
-        padding: EdgeInsets.all(isSmall ? 6 : 8),
+        icon: Icon(icon, size: isSmall ? 22 : 26),
+        iconSize: isSmall ? 22 : 26,
+        padding: EdgeInsets.all(isSmall ? 8 : 10),
         constraints: BoxConstraints(
-          minWidth: isSmall ? 32 : 48,
-          minHeight: isSmall ? 32 : 48,
+          minWidth: isSmall ? 42 : 52,
+          minHeight: isSmall ? 42 : 52,
         ),
         onPressed: onPressed,
         tooltip: tooltip,
@@ -232,13 +232,13 @@ class _ThemeToggleButton extends StatelessWidget {
           child: IconButton(
             icon: Icon(
               isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-              size: isSmall ? 18 : 24,
+              size: isSmall ? 22 : 26,
             ),
-            iconSize: isSmall ? 18 : 24,
-            padding: EdgeInsets.all(isSmall ? 6 : 8),
+            iconSize: isSmall ? 22 : 26,
+            padding: EdgeInsets.all(isSmall ? 8 : 10),
             constraints: BoxConstraints(
-              minWidth: isSmall ? 32 : 48,
-              minHeight: isSmall ? 32 : 48,
+              minWidth: isSmall ? 42 : 52,
+              minHeight: isSmall ? 42 : 52,
             ),
             onPressed: () => context.read<ThemeProvider>().toggleTheme(),
           ),
@@ -272,12 +272,12 @@ class _AdminSettingsButton extends StatelessWidget {
             ),
           ),
           child: IconButton(
-            icon: Icon(Icons.settings_rounded, size: isSmall ? 18 : 24),
-            iconSize: isSmall ? 18 : 24,
-            padding: EdgeInsets.all(isSmall ? 6 : 8),
+            icon: Icon(Icons.settings_rounded, size: isSmall ? 22 : 26),
+            iconSize: isSmall ? 22 : 26,
+            padding: EdgeInsets.all(isSmall ? 8 : 10),
             constraints: BoxConstraints(
-              minWidth: isSmall ? 32 : 48,
-              minHeight: isSmall ? 32 : 48,
+              minWidth: isSmall ? 42 : 52,
+              minHeight: isSmall ? 42 : 52,
             ),
             onPressed: () {
               Navigator.of(context).push(
@@ -419,8 +419,8 @@ class _ModernAhuCard extends StatelessWidget {
         final isRunning = data.state?.run ?? false;
         final theme = Theme.of(context);
 
-        // Optimized for 7-inch 1024x600 Pi display - fits 2-3 cards
-        final cardWidth = isSmallScreen ? 310.0 : 320.0;
+        // Optimized for 7-inch 1024x600 Pi display - fits 2 large cards per row
+        final cardWidth = isSmallScreen ? 380.0 : 420.0;
         
         return SizedBox(
           width: cardWidth,
@@ -434,25 +434,25 @@ class _ModernAhuCard extends StatelessWidget {
                   ),
                 );
               },
-              borderRadius: BorderRadius.circular(isSmallScreen ? 16 : 24),
+              borderRadius: BorderRadius.circular(isSmallScreen ? 20 : 28),
               child: Container(
                 decoration: BoxDecoration(
                   color: theme.cardColor,
-                  borderRadius: BorderRadius.circular(isSmallScreen ? 16 : 24),
+                  borderRadius: BorderRadius.circular(isSmallScreen ? 20 : 28),
                   border: Border.all(
                     color: theme.dividerColor.withOpacity(0.1),
                   ),
                 ),
-                padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
+                padding: EdgeInsets.all(isSmallScreen ? 18 : 22),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Header with status
                     _CardHeader(ahu: ahu, isOnline: isOnline, isSmallScreen: isSmallScreen),
-                    SizedBox(height: isSmallScreen ? 10 : 16),
+                    SizedBox(height: isSmallScreen ? 14 : 18),
                     // Sensors
                     _SensorRow(data: data, isSmallScreen: isSmallScreen),
-                    SizedBox(height: isSmallScreen ? 8 : 12),
+                    SizedBox(height: isSmallScreen ? 12 : 16),
                     // Status chips
                     _StatusChips(data: data, isRunning: isRunning, isSmallScreen: isSmallScreen),
                   ],
@@ -486,15 +486,19 @@ class _CardHeader extends StatelessWidget {
             children: [
               Text(
                 ahu.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.displayMedium?.copyWith(
-                  fontSize: isSmallScreen ? 18 : 22,
+                  fontSize: isSmallScreen ? 24 : 28,
                 ),
               ),
-              SizedBox(height: isSmallScreen ? 2 : 4),
+              SizedBox(height: isSmallScreen ? 4 : 6),
               Text(
                 '${ahu.room.toUpperCase()} • ${ahu.site}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  fontSize: isSmallScreen ? 11 : 14,
+                  fontSize: isSmallScreen ? 14 : 16,
                 ),
               ),
             ],
@@ -502,29 +506,29 @@ class _CardHeader extends StatelessWidget {
         ),
         Container(
           padding: EdgeInsets.symmetric(
-            horizontal: isSmallScreen ? 8 : 12, 
-            vertical: isSmallScreen ? 4 : 6,
+            horizontal: isSmallScreen ? 12 : 14, 
+            vertical: isSmallScreen ? 7 : 8,
           ),
           decoration: BoxDecoration(
             color: statusColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(isSmallScreen ? 8 : 12),
+            borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 14),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: isSmallScreen ? 5 : 6,
-                height: isSmallScreen ? 5 : 6,
+                width: isSmallScreen ? 8 : 9,
+                height: isSmallScreen ? 8 : 9,
                 decoration: BoxDecoration(
                   color: statusColor,
                   shape: BoxShape.circle,
                 ),
               ),
-              SizedBox(width: isSmallScreen ? 4 : 6),
+              SizedBox(width: isSmallScreen ? 6 : 8),
               Text(
                 isOnline ? 'Online' : 'Offline',
                 style: TextStyle(
-                  fontSize: isSmallScreen ? 10 : 12,
+                  fontSize: isSmallScreen ? 13 : 15,
                   fontWeight: FontWeight.w600,
                   color: statusColor,
                 ),
@@ -591,36 +595,39 @@ class _SensorDisplay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.all(isSmallScreen ? 10 : 16),
+      padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(isSmallScreen ? 12 : 16),
+        borderRadius: BorderRadius.circular(isSmallScreen ? 16 : 20),
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: isSmallScreen ? 22 : 28),
-          SizedBox(height: isSmallScreen ? 4 : 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: isSmallScreen ? 18 : 24,
-                  fontWeight: FontWeight.bold,
-                  color: color,
+          Icon(icon, color: color, size: isSmallScreen ? 30 : 36),
+          SizedBox(height: isSmallScreen ? 8 : 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 30 : 36,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
                 ),
-              ),
-              Text(
-                unit,
-                style: TextStyle(
-                  fontSize: isSmallScreen ? 10 : 14,
-                  fontWeight: FontWeight.w600,
-                  color: color.withOpacity(0.7),
+                Text(
+                  unit,
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 15 : 18,
+                    fontWeight: FontWeight.w600,
+                    color: color.withOpacity(0.7),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -638,8 +645,8 @@ class _StatusChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: isSmallScreen ? 6 : 8,
-      runSpacing: isSmallScreen ? 6 : 8,
+      spacing: isSmallScreen ? 8 : 10,
+      runSpacing: isSmallScreen ? 8 : 10,
       children: [
         _StatusChip(
           label: 'Running',
@@ -663,6 +670,12 @@ class _StatusChips extends StatelessWidget {
           label: _getFanLabel(data.state?.fanSpeed ?? 0),
           isActive: data.state?.fan ?? false,
           color: AppTheme.success,
+          isSmallScreen: isSmallScreen,
+        ),
+        _StatusChip(
+          label: '${data.state?.airChangesPerHour ?? 0} ACH',
+          isActive: (data.state?.airChangesPerHour ?? 0) > 0,
+          color: AppTheme.info,
           isSmallScreen: isSmallScreen,
         ),
       ],
@@ -699,21 +712,21 @@ class _StatusChip extends StatelessWidget {
     
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: isSmallScreen ? 8 : 12, 
-        vertical: isSmallScreen ? 4 : 6,
+        horizontal: isSmallScreen ? 12 : 14, 
+        vertical: isSmallScreen ? 7 : 9,
       ),
       decoration: BoxDecoration(
         color: isActive ? color.withOpacity(0.15) : Colors.transparent,
-        borderRadius: BorderRadius.circular(isSmallScreen ? 6 : 10),
+        borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
         border: Border.all(
           color: isActive ? color : theme.dividerColor.withOpacity(0.3),
-          width: isSmallScreen ? 1 : 1.5,
+          width: 1.5,
         ),
       ),
       child: Text(
         label,
         style: TextStyle(
-          fontSize: isSmallScreen ? 10 : 12,
+          fontSize: isSmallScreen ? 13 : 15,
           fontWeight: FontWeight.w600,
           color: isActive ? color : theme.textTheme.bodyMedium?.color,
         ),

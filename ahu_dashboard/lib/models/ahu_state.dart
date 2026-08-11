@@ -66,6 +66,20 @@ class AhuState {
     return (m2Interval! - m2Run!).clamp(1, 999);
   }
 
+  /// Air changes per hour delivered at the current fan speed
+  int get airChangesPerHour {
+    switch (fanSpeed) {
+      case 1:
+        return 20;
+      case 2:
+        return 30;
+      case 3:
+        return 40;
+      default:
+        return 0;
+    }
+  }
+
   /// Get fan speed display string
   String get fanSpeedDisplay {
     switch (fanSpeed) {

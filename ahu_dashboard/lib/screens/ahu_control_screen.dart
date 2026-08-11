@@ -95,61 +95,69 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    // Reduced padding for 7-inch Pi display
+    // Reduced padding for 7-inch Pi display. Status badges sit on their own
+    // full-width line so they stay legible beside the large action buttons.
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ALMED Branding
-          Text(
-            'ALMED',
-            style: TextStyle(
-              fontFamily: 'Verdana',
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white : Colors.black,
-              letterSpacing: 1.5,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Container(
-            width: 1,
-            height: 24,
-            color: theme.dividerColor.withOpacity(0.3),
-          ),
-          const SizedBox(width: 16),
-          Container(
-            decoration: BoxDecoration(
-              color: theme.cardColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: theme.dividerColor.withOpacity(0.1),
+          Row(
+            children: [
+              // ALMED Branding
+              Text(
+                'ALMED',
+                style: TextStyle(
+                  fontFamily: 'Verdana',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : Colors.black,
+                  letterSpacing: 1.5,
+                ),
               ),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
+              const SizedBox(width: 12),
+              Container(
+                width: 1,
+                height: 24,
+                color: theme.dividerColor.withOpacity(0.3),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.dividerColor.withOpacity(0.1),
+                  ),
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: _AhuTitle(ahuId: ahuId)),
+              // Start/Stop toggle
+              _StartStopButton(ahuId: ahuId),
+              const SizedBox(width: 8),
+              // CP Mode toggle
+              _CpModeToggleButton(ahuId: ahuId),
+              const SizedBox(width: 8),
+              // Mode toggle (Admin only)
+              _ModeToggleButton(ahuId: ahuId),
+              const SizedBox(width: 8),
+              // Screen Lock button
+              _ScreenLockButton(),
+              const SizedBox(width: 8),
+              // WiFi control (Admin only)
+              _WiFiButton(),
+              const SizedBox(width: 8),
+              // Reset button (Admin only)
+              _ResetButton(ahuId: ahuId),
+            ],
           ),
-          const SizedBox(width: 16),
-          Expanded(child: _AhuInfo(ahuId: ahuId)),
-          // Start/Stop toggle
-          _StartStopButton(ahuId: ahuId),
-          const SizedBox(width: 12),
-          // CP Mode toggle
-          _CpModeToggleButton(ahuId: ahuId),
-          const SizedBox(width: 12),
-          // Mode toggle (Admin only)
-          _ModeToggleButton(ahuId: ahuId),
-          const SizedBox(width: 12),
-          // Screen Lock button
-          _ScreenLockButton(),
-          const SizedBox(width: 12),
-          // WiFi control (Admin only)
-          _WiFiButton(),
-          const SizedBox(width: 12),
-          // Reset button (Admin only)
-          _ResetButton(ahuId: ahuId),
+          const SizedBox(height: 8),
+          _AhuStatusBadges(ahuId: ahuId),
         ],
       ),
     );
@@ -549,92 +557,113 @@ class _ChangePasscodeDialogState extends State<_ChangePasscodeDialog> {
 
 // Exit functionality moved to Admin screen only
 
-class _AhuInfo extends StatelessWidget {
+class _AhuTitle extends StatelessWidget {
   final String ahuId;
   
-  const _AhuInfo({required this.ahuId});
+  const _AhuTitle({required this.ahuId});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
-    return Selector<AppProvider, ({String name, bool isOnline, bool isRunning, bool isCloudConnected, String? version})>(
+    return Selector<AppProvider, String>(
+      selector: (_, provider) =>
+          provider.ahuUnits.firstWhere((a) => a.id == ahuId).name,
+      builder: (context, name, _) {
+        return Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.displayMedium?.copyWith(fontSize: 24),
+        );
+      },
+    );
+  }
+}
+
+/// Online / running / cloud / firmware badges on their own full-width line
+class _AhuStatusBadges extends StatelessWidget {
+  final String ahuId;
+
+  const _AhuStatusBadges({required this.ahuId});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Selector<AppProvider, ({bool isOnline, bool isRunning, bool isCloudConnected, String? version})>(
       selector: (_, provider) {
-        final ahu = provider.ahuUnits.firstWhere((a) => a.id == ahuId);
-        final status = provider.getStatus(ahuId);
         final state = provider.getState(ahuId);
-        final awsConnected = provider.isAwsConnected(ahuId);
         return (
-          name: ahu.name,
-          isOnline: status == 'online',
+          isOnline: provider.getStatus(ahuId) == 'online',
           isRunning: state?.run ?? false,
-          isCloudConnected: awsConnected,
+          isCloudConnected: provider.isAwsConnected(ahuId),
           version: state?.version,
         );
       },
       builder: (context, data, _) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        return Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              data.name,
-              style: theme.textTheme.displayMedium?.copyWith(fontSize: 22),
-                ),
-                if (data.version != null) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6366F1).withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: const Color(0xFF6366F1).withOpacity(0.4),
-                        width: 1,
-                      ),
-                    ),
-                    child: Text(
-                      data.version!,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: Color(0xFF6366F1),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 // Connection Status
                 Container(
-                  width: 6,
-                  height: 6,
+                  width: 10,
+                  height: 10,
                   decoration: BoxDecoration(
                     color: data.isOnline ? AppTheme.success : AppTheme.error,
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Text(
                   data.isOnline ? 'Online' : 'Offline',
-                  style: theme.textTheme.bodyMedium,
+                  style: theme.textTheme.bodyMedium?.copyWith(fontSize: 16),
                 ),
-                const SizedBox(width: 12),
-                // System Running Status
-                _RunningBadge(isRunning: data.isRunning),
-                const SizedBox(width: 8),
-                // Cloud Connection Status
-                _CloudBadge(isConnected: data.isCloudConnected),
               ],
             ),
+            // System Running Status
+            _RunningBadge(isRunning: data.isRunning),
+            // Cloud Connection Status
+            _CloudBadge(isConnected: data.isCloudConnected),
+            if (data.version != null) _VersionBadge(version: data.version!),
           ],
         );
       },
+    );
+  }
+}
+
+/// Firmware version chip
+class _VersionBadge extends StatelessWidget {
+  final String version;
+
+  const _VersionBadge({required this.version});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF6366F1).withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: const Color(0xFF6366F1).withOpacity(0.4),
+          width: 1,
+        ),
+      ),
+      child: Text(
+        version,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF6366F1),
+        ),
+      ),
     );
   }
 }
@@ -663,14 +692,14 @@ class _RunningBadge extends StatelessWidget {
         children: [
           Icon(
             isRunning ? Icons.power_rounded : Icons.power_off_rounded,
-            size: 14,
+            size: 16,
             color: isRunning ? color : Colors.grey.shade600,
           ),
           const SizedBox(width: 4),
           Text(
             isRunning ? 'RUNNING' : 'STOPPED',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
               color: isRunning ? color : Colors.grey.shade600,
               letterSpacing: 0.5,
@@ -706,14 +735,14 @@ class _CloudBadge extends StatelessWidget {
         children: [
           Icon(
             isConnected ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
-            size: 14,
+            size: 16,
             color: isConnected ? color : Colors.grey.shade600,
           ),
           const SizedBox(width: 4),
           Text(
             isConnected ? 'CLOUD' : 'OFFLINE',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
               color: isConnected ? color : Colors.grey.shade600,
               letterSpacing: 0.5,
@@ -747,7 +776,15 @@ class _StartStopButton extends StatelessWidget {
                   ? const [Color(0xFFEF4444), Color(0xFFDC2626)]
                   : const [Color(0xFF10B981), Color(0xFF059669)],
             ),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: (isRunning ? const Color(0xFFEF4444) : const Color(0xFF10B981))
+                    .withOpacity(0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Material(
             color: Colors.transparent,
@@ -755,24 +792,24 @@ class _StartStopButton extends StatelessWidget {
               onTap: canSend ? () {
                 context.read<AppProvider>().toggleAhu(ahuId);
               } : null,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
                       color: Colors.white,
-                      size: 20,
+                      size: 28,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Text(
                       isRunning ? 'Stop' : 'Start',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 19,
                       ),
                     ),
                   ],
@@ -1356,7 +1393,7 @@ class _SensorControl extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(22),
             child: Column(
               children: [
                 // Icon with glow effect
@@ -1365,8 +1402,8 @@ class _SensorControl extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
                     color: isDark ? Colors.white.withOpacity(0.9) : Colors.black87,
                     letterSpacing: 0.5,
                   ),
@@ -1417,7 +1454,7 @@ class _GlowingIcon extends StatelessWidget {
           ),
         ],
       ),
-      child: Icon(icon, color: color, size: 28),
+      child: Icon(icon, color: color, size: 34),
     );
   }
 }
@@ -1446,18 +1483,18 @@ class _ActualValue extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              fontSize: 48,
+              fontSize: 60,
               fontWeight: FontWeight.bold,
               color: Colors.white,
               height: 1,
             ),
           ),
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: 10),
             child: Text(
               unit,
               style: const TextStyle(
-                fontSize: 20,
+                fontSize: 26,
                 fontWeight: FontWeight.w600,
                 color: Colors.white,
               ),
@@ -1478,7 +1515,7 @@ class _Badge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
         color: color.withOpacity(0.15),
         borderRadius: BorderRadius.circular(12),
@@ -1486,7 +1523,7 @@ class _Badge extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: FontWeight.bold,
           color: color,
           letterSpacing: 1.2,
@@ -1536,13 +1573,13 @@ class _SetpointControls extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (isLocked) ...[
-                Icon(Icons.lock_rounded, size: 12, color: Colors.grey.shade500),
+                Icon(Icons.lock_rounded, size: 14, color: Colors.grey.shade500),
                 const SizedBox(width: 4),
               ],
           Text(
             'SETPOINT',
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
                   color: isLocked ? Colors.grey.shade500 : color.withOpacity(0.8),
               letterSpacing: 1.2,
@@ -1561,7 +1598,7 @@ class _SetpointControls extends StatelessWidget {
               ),
               const SizedBox(width: 16),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.9),
                   borderRadius: BorderRadius.circular(12),
@@ -1572,7 +1609,7 @@ class _SetpointControls extends StatelessWidget {
                 child: Text(
                   '${setpoint.toStringAsFixed(1)}$unit',
                   style: TextStyle(
-                    fontSize: 22,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                     color: isLocked ? Colors.grey : color,
                   ),
@@ -1613,8 +1650,8 @@ class _GlossyButton extends StatelessWidget {
         onTap: onPressed,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          width: 44,
-          height: 44,
+          width: 54,
+          height: 54,
           decoration: BoxDecoration(
             gradient: isEnabled
                 ? LinearGradient(
@@ -1638,7 +1675,7 @@ class _GlossyButton extends StatelessWidget {
           child: Icon(
             icon,
             color: isEnabled ? Colors.white : Colors.grey,
-            size: 20,
+            size: 26,
           ),
         ),
       ),
@@ -1730,13 +1767,13 @@ class _ComponentHeader extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(Icons.dashboard_rounded, size: 20, color: AppTheme.info),
+          child: const Icon(Icons.dashboard_rounded, size: 24, color: AppTheme.info),
         ),
         const SizedBox(width: 12),
         Text(
           'Component Status',
           style: TextStyle(
-            fontSize: 18,
+            fontSize: 22,
             fontWeight: FontWeight.bold,
             color: isDark ? Colors.white : Colors.black87,
             letterSpacing: 0.5,
@@ -1910,6 +1947,7 @@ class _FanIndicator extends StatelessWidget {
           child: _StatusIndicator(
             icon: Icons.air_rounded,
             label: _getFanLabel(data.state?.fanSpeed),
+            subLabel: '${data.state?.airChangesPerHour ?? 0} ACH',
             isActive: data.state?.fan ?? false,
             color: const Color(0xFF10B981),
             isClickable: canToggle,
@@ -1926,6 +1964,7 @@ class _StatusIndicator extends StatelessWidget {
   final bool isActive;
   final Color color;
   final bool isClickable;
+  final String? subLabel;
 
   const _StatusIndicator({
     required this.icon,
@@ -1933,6 +1972,7 @@ class _StatusIndicator extends StatelessWidget {
     required this.isActive,
     required this.color,
     this.isClickable = false,
+    this.subLabel,
   });
 
   @override
@@ -1942,7 +1982,7 @@ class _StatusIndicator extends StatelessWidget {
     return MouseRegion(
       cursor: isClickable ? SystemMouseCursors.click : SystemMouseCursors.basic,
       child: Container(
-        width: 120,
+        width: 150,
         decoration: BoxDecoration(
           gradient: isActive
               ? LinearGradient(
@@ -1973,18 +2013,22 @@ class _StatusIndicator extends StatelessWidget {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _IndicatorIcon(icon: icon, isActive: isActive, color: color, isDark: isDark),
                   const SizedBox(height: 8),
                   _IndicatorLabel(label: label, isActive: isActive, color: color, isDark: isDark),
+                  if (subLabel != null) ...[
+                    const SizedBox(height: 4),
+                    _IndicatorSubLabel(text: subLabel!, isActive: isActive, color: color, isDark: isDark),
+                  ],
                   const SizedBox(height: 6),
                   _IndicatorBadge(isActive: isActive, color: color),
                   if (isClickable) ...[
                     const SizedBox(height: 4),
-                    Icon(Icons.touch_app, size: 10, color: AppTheme.info.withOpacity(0.6)),
+                    Icon(Icons.touch_app, size: 12, color: AppTheme.info.withOpacity(0.6)),
                   ],
                 ],
               ),
@@ -2023,7 +2067,7 @@ class _IndicatorIcon extends StatelessWidget {
       child: Icon(
         icon,
         color: isActive ? color : (isDark ? Colors.white.withOpacity(0.4) : Colors.black54),
-        size: 22,
+        size: 28,
       ),
     );
   }
@@ -2050,10 +2094,41 @@ class _IndicatorLabel extends StatelessWidget {
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        fontSize: 10,
+        fontSize: 13,
         fontWeight: FontWeight.w700,
         color: isActive ? color : (isDark ? Colors.white.withOpacity(0.7) : Colors.black87),
         letterSpacing: 0.3,
+      ),
+    );
+  }
+}
+
+/// Secondary line under an indicator label, e.g. air changes per hour
+class _IndicatorSubLabel extends StatelessWidget {
+  final String text;
+  final bool isActive;
+  final Color color;
+  final bool isDark;
+
+  const _IndicatorSubLabel({
+    required this.text,
+    required this.isActive,
+    required this.color,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w800,
+        color: isActive ? color : (isDark ? Colors.white.withOpacity(0.5) : Colors.black54),
+        letterSpacing: 0.2,
       ),
     );
   }
@@ -2068,7 +2143,7 @@ class _IndicatorBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: isActive ? color.withOpacity(0.3) : Colors.grey.withOpacity(0.15),
         borderRadius: BorderRadius.circular(8),
@@ -2079,7 +2154,7 @@ class _IndicatorBadge extends StatelessWidget {
       child: Text(
         isActive ? 'ON' : 'OFF',
         style: TextStyle(
-          fontSize: 8,
+          fontSize: 11,
           fontWeight: FontWeight.bold,
           color: isActive ? color : Colors.grey.shade600,
           letterSpacing: 1,
@@ -2159,7 +2234,7 @@ class _LogsSection extends StatelessWidget {
                     Expanded(
                       child: Text(
                         'System Logs',
-                        style: theme.textTheme.displayMedium?.copyWith(fontSize: 18),
+                        style: theme.textTheme.displayMedium?.copyWith(fontSize: 20),
                       ),
                     ),
                     Icon(
@@ -2356,12 +2431,12 @@ class _PmReadingsRow extends StatelessWidget {
               // Header with AQI badge
               Row(
                 children: [
-                  Icon(Icons.air_rounded, color: aqiColor, size: 20),
+                  Icon(Icons.air_rounded, color: aqiColor, size: 24),
                   const SizedBox(width: 8),
                   Text(
                     'Air Quality',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: isDark ? Colors.white : Colors.black87,
                     ),
@@ -2369,7 +2444,7 @@ class _PmReadingsRow extends StatelessWidget {
                   const Spacer(),
                   // AQI Badge
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: aqiColor.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(8),
@@ -2381,21 +2456,21 @@ class _PmReadingsRow extends StatelessWidget {
                         Text(
                           'AQI ${telemetry.aqi ?? '--'}',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 15,
                             fontWeight: FontWeight.bold,
                             color: aqiColor,
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 6),
                         Text(
                           telemetry.aqiCategory,
-                          style: TextStyle(fontSize: 10, color: aqiColor),
+                          style: TextStyle(fontSize: 12, color: aqiColor),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 20),
+                  Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 24),
                 ],
               ),
               const SizedBox(height: 14),
@@ -2495,7 +2570,7 @@ class _PmValueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         decoration: BoxDecoration(
           color: color.withOpacity(isHighlight ? 0.15 : 0.08),
           borderRadius: BorderRadius.circular(12),
@@ -2508,7 +2583,7 @@ class _PmValueCard extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: color,
               ),
@@ -2517,7 +2592,7 @@ class _PmValueCard extends StatelessWidget {
             Text(
               value,
               style: TextStyle(
-                fontSize: isHighlight ? 22 : 18,
+                fontSize: isHighlight ? 28 : 24,
                 fontWeight: FontWeight.bold,
                 color: isDark ? Colors.white : Colors.black87,
               ),
@@ -2525,7 +2600,7 @@ class _PmValueCard extends StatelessWidget {
             Text(
               unit,
               style: TextStyle(
-                fontSize: 8,
+                fontSize: 11,
                 color: isDark ? Colors.white54 : Colors.black45,
               ),
             ),
@@ -2584,8 +2659,8 @@ class _ExpandableHepaBox extends StatelessWidget {
             children: [
               // HEPA Icon
               Container(
-                width: 52,
-                height: 52,
+                width: 62,
+                height: 62,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
@@ -2595,7 +2670,7 @@ class _ExpandableHepaBox extends StatelessWidget {
                     BoxShadow(color: hepaColor.withOpacity(0.3), blurRadius: 8),
                   ],
                 ),
-                child: Icon(_getHepaIcon(), color: Colors.white, size: 26),
+                child: Icon(_getHepaIcon(), color: Colors.white, size: 32),
               ),
               const SizedBox(width: 16),
               // HEPA Info
@@ -2608,14 +2683,14 @@ class _ExpandableHepaBox extends StatelessWidget {
                         Text(
                           'HEPA Filter',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: isDark ? Colors.white : Colors.black87,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: hepaColor.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(6),
@@ -2623,7 +2698,7 @@ class _ExpandableHepaBox extends StatelessWidget {
                           child: Text(
                             telemetry.calculatedHepaStatus,
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 12,
                               fontWeight: FontWeight.bold,
                               color: hepaColor,
                             ),
@@ -2640,7 +2715,7 @@ class _ExpandableHepaBox extends StatelessWidget {
                             borderRadius: BorderRadius.circular(4),
                             child: LinearProgressIndicator(
                               value: health / 100,
-                              minHeight: 8,
+                              minHeight: 10,
                               backgroundColor: isDark ? Colors.white12 : Colors.black12,
                               valueColor: AlwaysStoppedAnimation<Color>(hepaColor),
                             ),
@@ -2650,18 +2725,18 @@ class _ExpandableHepaBox extends StatelessWidget {
                         Text(
                           '$health%',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: hepaColor,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
                       'ΔP: ${telemetry.diffPressure?.toStringAsFixed(1) ?? '--'} Pa',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 14,
                         color: isDark ? Colors.white60 : Colors.black54,
                       ),
                     ),
