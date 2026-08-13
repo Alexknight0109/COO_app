@@ -380,7 +380,7 @@ class _AhuCardData {
   final AhuTelemetry? telemetry;
   final AhuState? state;
   final String? status;
-  final double displayedAcph;
+  final int displayedAcph;
 
   const _AhuCardData({
     required this.telemetry,
@@ -677,7 +677,7 @@ class _StatusChips extends StatelessWidget {
           isSmallScreen: isSmallScreen,
         ),
         _StatusChip(
-          label: '${data.displayedAcph == data.displayedAcph.roundToDouble() ? data.displayedAcph.toInt() : data.displayedAcph.toStringAsFixed(1)} ACPH',
+          label: '${data.displayedAcph} ACPH',
           isActive: data.displayedAcph > 0,
           color: AppTheme.info,
           isSmallScreen: isSmallScreen,

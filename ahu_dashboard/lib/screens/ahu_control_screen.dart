@@ -591,7 +591,7 @@ class _AhuStatusBadges extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Selector<AppProvider, ({bool isOnline, bool isRunning, bool isCloudConnected, double acph, String? version})>(
+    return Selector<AppProvider, ({bool isOnline, bool isRunning, bool isCloudConnected, int acph, String? version})>(
       selector: (_, provider) {
         final state = provider.getState(ahuId);
         return (
@@ -757,9 +757,9 @@ class _CloudBadge extends StatelessWidget {
   }
 }
 
-/// Large ACPH readout on the right side of the humidity card.
+/// ACPH readout on the right side of the humidity card.
 class _AcphShowcase extends StatelessWidget {
-  final double acph;
+  final int acph;
   final Color color;
 
   const _AcphShowcase({required this.acph, required this.color});
@@ -771,16 +771,12 @@ class _AcphShowcase extends StatelessWidget {
     final textColor = isActive
         ? color
         : (isDark ? Colors.white.withOpacity(0.55) : Colors.black54);
-    final label = acph == acph.roundToDouble()
-        ? acph.toInt().toString()
-        : acph.toStringAsFixed(1);
 
     return Container(
-      constraints: const BoxConstraints(minWidth: 108),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         color: color.withOpacity(isActive ? 0.16 : 0.06),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withOpacity(isActive ? 0.5 : 0.22), width: 1.5),
       ),
       child: Column(
@@ -801,20 +797,20 @@ class _AcphShowcase extends StatelessWidget {
                 TextSpan(
                   text: 'ACPH',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 1.3,
+                    letterSpacing: 1.2,
                     color: textColor.withOpacity(0.95),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
-            label,
+            '$acph',
             style: TextStyle(
-              fontSize: 36,
+              fontSize: 28,
               fontWeight: FontWeight.w800,
               height: 1,
               color: textColor,
@@ -828,7 +824,7 @@ class _AcphShowcase extends StatelessWidget {
 
 /// Read-only air changes per hour badge; value follows the fan speed
 class _AchBadge extends StatelessWidget {
-  final double acph;
+  final int acph;
 
   const _AchBadge({required this.acph});
 
@@ -836,9 +832,6 @@ class _AchBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final isActive = acph > 0;
     final color = isActive ? const Color(0xFF0EA5E9) : Colors.grey;
-    final label = acph == acph.roundToDouble()
-        ? acph.toInt().toString()
-        : acph.toStringAsFixed(1);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -863,7 +856,7 @@ class _AchBadge extends StatelessWidget {
             TextSpan(
               children: [
                 TextSpan(
-                  text: '$label  ',
+                  text: '$acph  ',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -1422,7 +1415,7 @@ class _SensorControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<AppProvider, ({_SensorData data, bool canSendCommands, bool isLocked, double acph})>(
+    return Selector<AppProvider, ({_SensorData data, bool canSendCommands, bool isLocked, int acph})>(
       selector: (_, provider) => (
         data: _SensorData(
           telemetry: provider.getTelemetry(ahuId),
@@ -1441,11 +1434,9 @@ class _SensorControls extends StatelessWidget {
         final canModifyHumidity = canSend && !isLocked;
         
         return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Temperature - ALWAYS controllable (even when locked)
             Expanded(
-              flex: 4,
               child: _SensorControl(
                 icon: Icons.thermostat_rounded,
                 label: 'Temperature',
@@ -1464,7 +1455,6 @@ class _SensorControls extends StatelessWidget {
             const SizedBox(width: 16),
             // Humidity - LOCKED when screen is locked
             Expanded(
-              flex: 6,
               child: _SensorControl(
                 icon: Icons.water_drop_rounded,
                 label: 'Humidity',
@@ -1499,7 +1489,7 @@ class _SensorControl extends StatelessWidget {
   final double max;
   final ValueChanged<double>? onChanged;
   final bool isLocked;
-  final double? showcaseAcph;
+  final int? showcaseAcph;
 
   const _SensorControl({
     required this.icon,
@@ -1543,7 +1533,7 @@ class _SensorControl extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Padding(
-            padding: EdgeInsets.all(showcaseAcph != null ? 26 : 22),
+            padding: const EdgeInsets.all(22),
             child: Column(
               children: [
                 Row(
@@ -1557,7 +1547,7 @@ class _SensorControl extends StatelessWidget {
                           Text(
                             label,
                             style: TextStyle(
-                              fontSize: showcaseAcph != null ? 19 : 17,
+                              fontSize: 17,
                               fontWeight: FontWeight.w700,
                               color: isDark ? Colors.white.withOpacity(0.9) : Colors.black87,
                               letterSpacing: 0.5,
