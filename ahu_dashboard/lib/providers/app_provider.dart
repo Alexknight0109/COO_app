@@ -318,7 +318,7 @@ class AppProvider extends ChangeNotifier {
       _debouncedNotify(); // Debounced for RPi
     });
 
-    // Listen to status updates - only register ONLINE devices (dynamic discovery)
+    // Listen to status updates - register devices from either state (dynamic discovery)
     _statusSubscription = _mqttService!.statusStream.listen((entry) {
       final ahuId = _extractAhuId(entry.key);
       final status = entry.value.trim().toLowerCase();
@@ -335,11 +335,11 @@ class AppProvider extends ChangeNotifier {
         final recentlySeen = lastSeen != null &&
             DateTime.now().difference(lastSeen) < const Duration(seconds: 30);
         if (recentlySeen) return;
-        // Device went offline - just update status if registered, don't register new.
-        if (_isMatchingAhu(entry.key)) {
-          _statusData[ahuId] = status;
-          _debouncedStateNotify();
-        }
+        // A powered-down unit survives only as the broker's retained will
+        // message, so register from it too or the card vanishes completely.
+        _ensureAhuRegistered(entry.key);
+        _statusData[ahuId] = status;
+        _debouncedStateNotify();
       }
     });
 
