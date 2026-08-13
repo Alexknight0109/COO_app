@@ -786,13 +786,28 @@ class _AcphShowcase extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'ACPH',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.4,
-              color: textColor.withOpacity(0.9),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: 'set ',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                    color: textColor.withOpacity(0.75),
+                  ),
+                ),
+                TextSpan(
+                  text: 'ACPH',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.3,
+                    color: textColor.withOpacity(0.95),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
@@ -844,13 +859,36 @@ class _AchBadge extends StatelessWidget {
             color: isActive ? color : Colors.grey.shade600,
           ),
           const SizedBox(width: 4),
-          Text(
-            '$label ACPH',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: isActive ? color : Colors.grey.shade600,
-              letterSpacing: 0.5,
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '$label  ',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isActive ? color : Colors.grey.shade600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                TextSpan(
+                  text: 'set ',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: isActive ? color : Colors.grey.shade600,
+                  ),
+                ),
+                TextSpan(
+                  text: 'ACPH',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: isActive ? color : Colors.grey.shade600,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
