@@ -598,7 +598,7 @@ class _AhuStatusBadges extends StatelessWidget {
           isOnline: provider.getStatus(ahuId) == 'online',
           isRunning: state?.run ?? false,
           isCloudConnected: provider.isAwsConnected(ahuId),
-          acph: state?.airChangesPerHour ?? 0,
+          acph: provider.getDisplayedAcph(ahuId),
           version: state?.version,
         );
       },
@@ -752,6 +752,43 @@ class _CloudBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Large ACPH readout on the humidity card (showcase ramp, not a control).
+class _AcphShowcase extends StatelessWidget {
+  final int acph;
+  final Color color;
+
+  const _AcphShowcase({required this.acph, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isActive = acph > 0;
+    final textColor = isActive
+        ? color
+        : (isDark ? Colors.white.withOpacity(0.55) : Colors.black54);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(isActive ? 0.14 : 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(isActive ? 0.45 : 0.2)),
+      ),
+      child: Text(
+        'ACPH - $acph',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: textColor,
+          letterSpacing: 0.6,
+        ),
       ),
     );
   }
@@ -1327,7 +1364,7 @@ class _SensorControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<AppProvider, ({_SensorData data, bool canSendCommands, bool isLocked})>(
+    return Selector<AppProvider, ({_SensorData data, bool canSendCommands, bool isLocked, int acph})>(
       selector: (_, provider) => (
         data: _SensorData(
           telemetry: provider.getTelemetry(ahuId),
@@ -1335,6 +1372,7 @@ class _SensorControls extends StatelessWidget {
         ),
         canSendCommands: provider.canSendCommands,
         isLocked: provider.isScreenLocked,
+        acph: provider.getDisplayedAcph(ahuId),
       ),
       builder: (context, result, _) {
         final data = result.data;
@@ -1379,6 +1417,7 @@ class _SensorControls extends StatelessWidget {
                 onChanged: canModifyHumidity ? (value) {
                   context.read<AppProvider>().setHumidity(ahuId, value);
                 } : null,
+                showcaseAcph: result.acph,
               ),
             ),
           ],
@@ -1399,6 +1438,7 @@ class _SensorControl extends StatelessWidget {
   final double max;
   final ValueChanged<double>? onChanged;
   final bool isLocked;
+  final int? showcaseAcph;
 
   const _SensorControl({
     required this.icon,
@@ -1411,6 +1451,7 @@ class _SensorControl extends StatelessWidget {
     required this.max,
     this.onChanged,
     this.isLocked = false,
+    this.showcaseAcph,
   });
 
   @override
@@ -1472,6 +1513,10 @@ class _SensorControl extends StatelessWidget {
                   onChanged: onChanged,
                   isLocked: isLocked,
                 ),
+                if (showcaseAcph != null) ...[
+                  const SizedBox(height: 16),
+                  _AcphShowcase(acph: showcaseAcph!, color: color),
+                ],
               ],
             ),
           ),

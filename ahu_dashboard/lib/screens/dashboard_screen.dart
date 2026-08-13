@@ -380,11 +380,13 @@ class _AhuCardData {
   final AhuTelemetry? telemetry;
   final AhuState? state;
   final String? status;
+  final int displayedAcph;
 
   const _AhuCardData({
     required this.telemetry,
     required this.state,
     required this.status,
+    required this.displayedAcph,
   });
 
   @override
@@ -394,10 +396,11 @@ class _AhuCardData {
           runtimeType == other.runtimeType &&
           telemetry == other.telemetry &&
           state == other.state &&
-          status == other.status;
+          status == other.status &&
+          displayedAcph == other.displayedAcph;
 
   @override
-  int get hashCode => Object.hash(telemetry, state, status);
+  int get hashCode => Object.hash(telemetry, state, status, displayedAcph);
 }
 
 class _ModernAhuCard extends StatelessWidget {
@@ -413,6 +416,7 @@ class _ModernAhuCard extends StatelessWidget {
         telemetry: provider.getTelemetry(ahu.id),
         state: provider.getState(ahu.id),
         status: provider.getStatus(ahu.id),
+        displayedAcph: provider.getDisplayedAcph(ahu.id),
       ),
       builder: (context, data, _) {
         final isOnline = data.status == 'online';
@@ -673,8 +677,8 @@ class _StatusChips extends StatelessWidget {
           isSmallScreen: isSmallScreen,
         ),
         _StatusChip(
-          label: '${data.state?.airChangesPerHour ?? 0} ACPH',
-          isActive: (data.state?.airChangesPerHour ?? 0) > 0,
+          label: '${data.displayedAcph} ACPH',
+          isActive: data.displayedAcph > 0,
           color: AppTheme.info,
           isSmallScreen: isSmallScreen,
         ),

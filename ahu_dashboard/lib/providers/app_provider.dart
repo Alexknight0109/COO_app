@@ -12,6 +12,7 @@ import '../services/mqtt_service.dart';
 class AppProvider extends ChangeNotifier {
   Timer? _debounceTimer;
   Timer? _stateDebounceTimer;
+  Timer? _acphTicker;
   MqttService? _mqttService;
   StreamSubscription<bool>? _connectionSubscription;
   StreamSubscription<MapEntry<String, AhuTelemetry>>? _telemetrySubscription;
@@ -28,6 +29,8 @@ class AppProvider extends ChangeNotifier {
   final Map<String, bool> _awsStatusData =
       {}; // AWS cloud connection status per AHU
   final Map<String, DateTime> _lastSeenData = {};
+  /// Showcase ACPH counter per AHU (ramps toward fan-speed target).
+  final Map<String, int> _displayedAcph = {};
   final Set<String> _hospitalVisibleAhuKeys = {};
   final Set<String> _hospitalHiddenAhuKeys = {};
   bool _isConnected = false;
@@ -194,6 +197,9 @@ class AppProvider extends ChangeNotifier {
   /// Get status for specific AHU
   String? getStatus(String ahuId) => _statusData[ahuId];
 
+  /// Showcase ACPH currently shown on the UI (ramps 1 ACPH every 2s).
+  int getDisplayedAcph(String ahuId) => _displayedAcph[ahuId] ?? 0;
+
   String _ahuVisibilityKey(AhuUnit ahu) => ahu.id;
   String _topicToAhuKey(String topicData) {
     final parts = topicData.split('|');
@@ -269,6 +275,7 @@ class AppProvider extends ChangeNotifier {
 
     debugPrint(
         'AppProvider: Initializing MQTT - Connecting to broker at $defaultBroker:$defaultPort');
+    _ensureAcphTicker();
 
     // Listen to connection status
     _connectionSubscription =
@@ -413,6 +420,7 @@ class AppProvider extends ChangeNotifier {
     _logData.remove(ahuId);
     _statusData.remove(ahuId);
     _lastSeenData.remove(ahuId);
+    _displayedAcph.remove(ahuId);
     _ahuUnitsChanged = true;
     notifyListeners();
   }
@@ -427,6 +435,7 @@ class AppProvider extends ChangeNotifier {
     _statusData.clear();
     _lastSeenData.clear();
     _awsStatusData.clear(); // Also clear AWS status
+    _displayedAcph.clear();
     _cachedAhuUnits = null;
     _ahuUnitsChanged = true;
     notifyListeners();
@@ -741,10 +750,34 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  int _targetAcph(String ahuId) {
+    final state = _stateData[ahuId];
+    if (state == null || !state.run) return 0;
+    return state.airChangesPerHour;
+  }
+
+  void _ensureAcphTicker() {
+    if (_acphTicker != null) return;
+    _acphTicker = Timer.periodic(const Duration(seconds: 2), (_) => _tickAcph());
+  }
+
+  void _tickAcph() {
+    var changed = false;
+    for (final ahuId in _ahuUnits.keys) {
+      final target = _targetAcph(ahuId);
+      final current = _displayedAcph[ahuId] ?? 0;
+      if (current == target) continue;
+      _displayedAcph[ahuId] = current < target ? current + 1 : current - 1;
+      changed = true;
+    }
+    if (changed) notifyListeners();
+  }
+
   @override
   void dispose() {
     _debounceTimer?.cancel();
     _stateDebounceTimer?.cancel();
+    _acphTicker?.cancel();
     _cancelMqttSubscriptions();
     _mqttService?.dispose();
     super.dispose();
