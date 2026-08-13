@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ahu_unit.dart';
@@ -30,7 +31,9 @@ class AppProvider extends ChangeNotifier {
       {}; // AWS cloud connection status per AHU
   final Map<String, DateTime> _lastSeenData = {};
   /// Showcase ACPH counter per AHU (ramps toward fan-speed target).
-  final Map<String, int> _displayedAcph = {};
+  final Map<String, double> _displayedAcph = {};
+  final Map<String, int> _lastAcphRate = {};
+  final Map<String, DateTime> _acphLastTick = {};
   final Set<String> _hospitalVisibleAhuKeys = {};
   final Set<String> _hospitalHiddenAhuKeys = {};
   bool _isConnected = false;
@@ -197,8 +200,12 @@ class AppProvider extends ChangeNotifier {
   /// Get status for specific AHU
   String? getStatus(String ahuId) => _statusData[ahuId];
 
-  /// Showcase ACPH currently shown on the UI (ramps 1 ACPH every 2s).
-  int getDisplayedAcph(String ahuId) => _displayedAcph[ahuId] ?? 0;
+  /// Showcase ACPH currently shown on the UI, rounded to 0.1.
+  /// Ramps at the fan's ACPH rate: low 20/h, mid 30/h, high 40/h (0→target ≈ 1 hour).
+  double getDisplayedAcph(String ahuId) {
+    final value = _displayedAcph[ahuId] ?? 0.0;
+    return (value * 10).round() / 10.0;
+  }
 
   String _ahuVisibilityKey(AhuUnit ahu) => ahu.id;
   String _topicToAhuKey(String topicData) {
@@ -421,6 +428,8 @@ class AppProvider extends ChangeNotifier {
     _statusData.remove(ahuId);
     _lastSeenData.remove(ahuId);
     _displayedAcph.remove(ahuId);
+    _lastAcphRate.remove(ahuId);
+    _acphLastTick.remove(ahuId);
     _ahuUnitsChanged = true;
     notifyListeners();
   }
@@ -436,6 +445,8 @@ class AppProvider extends ChangeNotifier {
     _lastSeenData.clear();
     _awsStatusData.clear(); // Also clear AWS status
     _displayedAcph.clear();
+    _lastAcphRate.clear();
+    _acphLastTick.clear();
     _cachedAhuUnits = null;
     _ahuUnitsChanged = true;
     notifyListeners();
@@ -758,17 +769,39 @@ class AppProvider extends ChangeNotifier {
 
   void _ensureAcphTicker() {
     if (_acphTicker != null) return;
-    _acphTicker = Timer.periodic(const Duration(seconds: 2), (_) => _tickAcph());
+    _acphTicker = Timer.periodic(const Duration(seconds: 5), (_) => _tickAcph());
   }
 
   void _tickAcph() {
+    final now = DateTime.now();
     var changed = false;
     for (final ahuId in _ahuUnits.keys) {
-      final target = _targetAcph(ahuId);
-      final current = _displayedAcph[ahuId] ?? 0;
-      if (current == target) continue;
-      _displayedAcph[ahuId] = current < target ? current + 1 : current - 1;
-      changed = true;
+      final target = _targetAcph(ahuId).toDouble();
+      if (target > 0) _lastAcphRate[ahuId] = target.round();
+      final rate = target > 0 ? target : (_lastAcphRate[ahuId] ?? 20).toDouble();
+      final previousShown = getDisplayedAcph(ahuId);
+      var current = _displayedAcph[ahuId] ?? 0.0;
+      final lastTick = _acphLastTick[ahuId] ?? now;
+      _acphLastTick[ahuId] = now;
+
+      if ((current - target).abs() < 0.05) {
+        if (previousShown != (target * 10).round() / 10.0) {
+          _displayedAcph[ahuId] = target;
+          changed = true;
+        } else {
+          _displayedAcph[ahuId] = target;
+        }
+        continue;
+      }
+
+      final hours = now.difference(lastTick).inMilliseconds / 3600000.0;
+      if (hours <= 0 || rate <= 0) continue;
+      final delta = rate * hours;
+      current = current < target
+          ? math.min(target, current + delta)
+          : math.max(target, current - delta);
+      _displayedAcph[ahuId] = current;
+      if (getDisplayedAcph(ahuId) != previousShown) changed = true;
     }
     if (changed) notifyListeners();
   }

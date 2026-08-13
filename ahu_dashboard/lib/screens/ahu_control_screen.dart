@@ -591,7 +591,7 @@ class _AhuStatusBadges extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Selector<AppProvider, ({bool isOnline, bool isRunning, bool isCloudConnected, int acph, String? version})>(
+    return Selector<AppProvider, ({bool isOnline, bool isRunning, bool isCloudConnected, double acph, String? version})>(
       selector: (_, provider) {
         final state = provider.getState(ahuId);
         return (
@@ -757,9 +757,9 @@ class _CloudBadge extends StatelessWidget {
   }
 }
 
-/// Large ACPH readout on the humidity card (showcase ramp, not a control).
+/// Large ACPH readout on the right side of the humidity card.
 class _AcphShowcase extends StatelessWidget {
-  final int acph;
+  final double acph;
   final Color color;
 
   const _AcphShowcase({required this.acph, required this.color});
@@ -771,24 +771,41 @@ class _AcphShowcase extends StatelessWidget {
     final textColor = isActive
         ? color
         : (isDark ? Colors.white.withOpacity(0.55) : Colors.black54);
+    final label = acph == acph.roundToDouble()
+        ? acph.toInt().toString()
+        : acph.toStringAsFixed(1);
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      constraints: const BoxConstraints(minWidth: 108),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: color.withOpacity(isActive ? 0.14 : 0.06),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(isActive ? 0.45 : 0.2)),
+        color: color.withOpacity(isActive ? 0.16 : 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(isActive ? 0.5 : 0.22), width: 1.5),
       ),
-      child: Text(
-        'ACPH - $acph',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w800,
-          color: textColor,
-          letterSpacing: 0.6,
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'ACPH',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.4,
+              color: textColor.withOpacity(0.9),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 36,
+              fontWeight: FontWeight.w800,
+              height: 1,
+              color: textColor,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -796,7 +813,7 @@ class _AcphShowcase extends StatelessWidget {
 
 /// Read-only air changes per hour badge; value follows the fan speed
 class _AchBadge extends StatelessWidget {
-  final int acph;
+  final double acph;
 
   const _AchBadge({required this.acph});
 
@@ -804,6 +821,9 @@ class _AchBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final isActive = acph > 0;
     final color = isActive ? const Color(0xFF0EA5E9) : Colors.grey;
+    final label = acph == acph.roundToDouble()
+        ? acph.toInt().toString()
+        : acph.toStringAsFixed(1);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -825,7 +845,7 @@ class _AchBadge extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            '$acph ACPH',
+            '$label ACPH',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
@@ -1364,7 +1384,7 @@ class _SensorControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<AppProvider, ({_SensorData data, bool canSendCommands, bool isLocked, int acph})>(
+    return Selector<AppProvider, ({_SensorData data, bool canSendCommands, bool isLocked, double acph})>(
       selector: (_, provider) => (
         data: _SensorData(
           telemetry: provider.getTelemetry(ahuId),
@@ -1383,9 +1403,11 @@ class _SensorControls extends StatelessWidget {
         final canModifyHumidity = canSend && !isLocked;
         
         return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Temperature - ALWAYS controllable (even when locked)
             Expanded(
+              flex: 4,
               child: _SensorControl(
                 icon: Icons.thermostat_rounded,
                 label: 'Temperature',
@@ -1404,6 +1426,7 @@ class _SensorControls extends StatelessWidget {
             const SizedBox(width: 16),
             // Humidity - LOCKED when screen is locked
             Expanded(
+              flex: 6,
               child: _SensorControl(
                 icon: Icons.water_drop_rounded,
                 label: 'Humidity',
@@ -1438,7 +1461,7 @@ class _SensorControl extends StatelessWidget {
   final double max;
   final ValueChanged<double>? onChanged;
   final bool isLocked;
-  final int? showcaseAcph;
+  final double? showcaseAcph;
 
   const _SensorControl({
     required this.icon,
@@ -1482,28 +1505,40 @@ class _SensorControl extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Padding(
-            padding: const EdgeInsets.all(22),
+            padding: EdgeInsets.all(showcaseAcph != null ? 26 : 22),
             child: Column(
               children: [
-                // Icon with glow effect
-                _GlowingIcon(icon: icon, color: color),
-                const SizedBox(height: 12),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white.withOpacity(0.9) : Colors.black87,
-                    letterSpacing: 0.5,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          _GlowingIcon(icon: icon, color: color),
+                          const SizedBox(height: 12),
+                          Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: showcaseAcph != null ? 19 : 17,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white.withOpacity(0.9) : Colors.black87,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _ActualValue(value: actual, unit: unit, color: color),
+                          const SizedBox(height: 6),
+                          _Badge(text: 'ACTUAL', color: color),
+                        ],
+                      ),
+                    ),
+                    if (showcaseAcph != null) ...[
+                      const SizedBox(width: 14),
+                      _AcphShowcase(acph: showcaseAcph!, color: color),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 16),
-                // Large actual value
-                _ActualValue(value: actual, unit: unit, color: color),
-                const SizedBox(height: 6),
-                _Badge(text: 'ACTUAL', color: color),
                 const SizedBox(height: 20),
-                // Setpoint controls
                 _SetpointControls(
                   setpoint: setpoint,
                   unit: unit,
@@ -1513,10 +1548,6 @@ class _SensorControl extends StatelessWidget {
                   onChanged: onChanged,
                   isLocked: isLocked,
                 ),
-                if (showcaseAcph != null) ...[
-                  const SizedBox(height: 16),
-                  _AcphShowcase(acph: showcaseAcph!, color: color),
-                ],
               ],
             ),
           ),
