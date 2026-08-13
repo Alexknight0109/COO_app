@@ -581,7 +581,7 @@ class _AhuTitle extends StatelessWidget {
   }
 }
 
-/// Online / running / cloud / firmware badges on their own full-width line
+/// Online / running / cloud / ACPH / firmware badges on their own full-width line
 class _AhuStatusBadges extends StatelessWidget {
   final String ahuId;
 
@@ -591,13 +591,14 @@ class _AhuStatusBadges extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Selector<AppProvider, ({bool isOnline, bool isRunning, bool isCloudConnected, String? version})>(
+    return Selector<AppProvider, ({bool isOnline, bool isRunning, bool isCloudConnected, int acph, String? version})>(
       selector: (_, provider) {
         final state = provider.getState(ahuId);
         return (
           isOnline: provider.getStatus(ahuId) == 'online',
           isRunning: state?.run ?? false,
           isCloudConnected: provider.isAwsConnected(ahuId),
+          acph: state?.airChangesPerHour ?? 0,
           version: state?.version,
         );
       },
@@ -630,6 +631,8 @@ class _AhuStatusBadges extends StatelessWidget {
             _RunningBadge(isRunning: data.isRunning),
             // Cloud Connection Status
             _CloudBadge(isConnected: data.isCloudConnected),
+            // Air changes per hour derived from fan speed
+            _AchBadge(acph: data.acph),
             if (data.version != null) _VersionBadge(version: data.version!),
           ],
         );
@@ -745,6 +748,51 @@ class _CloudBadge extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.bold,
               color: isConnected ? color : Colors.grey.shade600,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Read-only air changes per hour badge; value follows the fan speed
+class _AchBadge extends StatelessWidget {
+  final int acph;
+
+  const _AchBadge({required this.acph});
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = acph > 0;
+    final color = isActive ? const Color(0xFF0EA5E9) : Colors.grey;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isActive ? color : Colors.grey.shade400,
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.autorenew_rounded,
+            size: 16,
+            color: isActive ? color : Colors.grey.shade600,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$acph ACPH',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: isActive ? color : Colors.grey.shade600,
               letterSpacing: 0.5,
             ),
           ),
@@ -1947,7 +1995,6 @@ class _FanIndicator extends StatelessWidget {
           child: _StatusIndicator(
             icon: Icons.air_rounded,
             label: _getFanLabel(data.state?.fanSpeed),
-            subLabel: '${data.state?.airChangesPerHour ?? 0} ACH',
             isActive: data.state?.fan ?? false,
             color: const Color(0xFF10B981),
             isClickable: canToggle,
@@ -1964,7 +2011,6 @@ class _StatusIndicator extends StatelessWidget {
   final bool isActive;
   final Color color;
   final bool isClickable;
-  final String? subLabel;
 
   const _StatusIndicator({
     required this.icon,
@@ -1972,7 +2018,6 @@ class _StatusIndicator extends StatelessWidget {
     required this.isActive,
     required this.color,
     this.isClickable = false,
-    this.subLabel,
   });
 
   @override
@@ -2020,10 +2065,6 @@ class _StatusIndicator extends StatelessWidget {
                   _IndicatorIcon(icon: icon, isActive: isActive, color: color, isDark: isDark),
                   const SizedBox(height: 8),
                   _IndicatorLabel(label: label, isActive: isActive, color: color, isDark: isDark),
-                  if (subLabel != null) ...[
-                    const SizedBox(height: 4),
-                    _IndicatorSubLabel(text: subLabel!, isActive: isActive, color: color, isDark: isDark),
-                  ],
                   const SizedBox(height: 6),
                   _IndicatorBadge(isActive: isActive, color: color),
                   if (isClickable) ...[
@@ -2098,37 +2139,6 @@ class _IndicatorLabel extends StatelessWidget {
         fontWeight: FontWeight.w700,
         color: isActive ? color : (isDark ? Colors.white.withOpacity(0.7) : Colors.black87),
         letterSpacing: 0.3,
-      ),
-    );
-  }
-}
-
-/// Secondary line under an indicator label, e.g. air changes per hour
-class _IndicatorSubLabel extends StatelessWidget {
-  final String text;
-  final bool isActive;
-  final Color color;
-  final bool isDark;
-
-  const _IndicatorSubLabel({
-    required this.text,
-    required this.isActive,
-    required this.color,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      textAlign: TextAlign.center,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontSize: 15,
-        fontWeight: FontWeight.w800,
-        color: isActive ? color : (isDark ? Colors.white.withOpacity(0.5) : Colors.black54),
-        letterSpacing: 0.2,
       ),
     );
   }

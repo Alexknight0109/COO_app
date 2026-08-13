@@ -673,7 +673,7 @@ class _StatusChips extends StatelessWidget {
           isSmallScreen: isSmallScreen,
         ),
         _StatusChip(
-          label: '${data.state?.airChangesPerHour ?? 0} ACH',
+          label: '${data.state?.airChangesPerHour ?? 0} ACPH',
           isActive: (data.state?.airChangesPerHour ?? 0) > 0,
           color: AppTheme.info,
           isSmallScreen: isSmallScreen,
