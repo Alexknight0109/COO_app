@@ -213,7 +213,9 @@ class AppProvider extends ChangeNotifier {
   int getDisplayedAcph(String ahuId) => _displayedAcph[ahuId] ?? 0;
 
   /// Instant target ACPH for the humidity card (20 / 30 / 40 / 0).
-  int getTargetAcph(String ahuId) => _targetAcph(ahuId);
+  /// Falls back to the last shown value while the unit's state is unknown.
+  int getTargetAcph(String ahuId) =>
+      _liveTargetAcph(ahuId) ?? _displayedAcph[ahuId] ?? 0;
 
   String _ahuVisibilityKey(AhuUnit ahu) => ahu.id;
   String _topicToAhuKey(String topicData) {
@@ -769,11 +771,17 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  int _targetAcph(String ahuId) {
-    if (!_isConnected) return 0;
-    if (_statusData[ahuId] != 'online') return 0;
+  /// Target ACPH, or null while this unit's state is not yet known.
+  /// Null means "hold the current number" — logging out clears the state maps,
+  /// and treating that gap as a real target of 0 is what restarted the count.
+  int? _liveTargetAcph(String ahuId) {
+    if (!_isConnected) return null;
+    final status = _statusData[ahuId];
+    if (status == null) return null;
+    if (status != 'online') return 0;
     final state = _stateData[ahuId];
-    if (state == null || !state.run) return 0;
+    if (state == null) return null;
+    if (!state.run) return 0;
     return state.airChangesPerHour;
   }
 
@@ -785,7 +793,8 @@ class AppProvider extends ChangeNotifier {
   void _tickAcph() {
     var changed = false;
     for (final ahuId in _ahuUnits.keys) {
-      final target = _targetAcph(ahuId);
+      final target = _liveTargetAcph(ahuId);
+      if (target == null) continue; // state unknown - freeze, never restart
       // First sight (or after cold start): jump to target. Ramp only when
       // fan speed / run state later moves the target away from current.
       if (!_displayedAcph.containsKey(ahuId)) {
