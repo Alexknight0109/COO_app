@@ -31,6 +31,7 @@ class AppProvider extends ChangeNotifier {
   final Map<String, DateTime> _lastSeenData = {};
   /// Showcase ACPH counter per AHU (ramps toward fan-speed target).
   final Map<String, int> _displayedAcph = {};
+  final Map<String, DateTime> _lastTelemetryAt = {};
   final Set<String> _hospitalVisibleAhuKeys = {};
   final Set<String> _hospitalHiddenAhuKeys = {};
   bool _isConnected = false;
@@ -185,8 +186,19 @@ class AppProvider extends ChangeNotifier {
   Set<String> get hospitalVisibleAhuKeys =>
       Set.unmodifiable(_hospitalVisibleAhuKeys);
 
-  /// Get telemetry for specific AHU
-  AhuTelemetry? getTelemetry(String ahuId) => _telemetryData[ahuId];
+  /// Get telemetry for specific AHU.
+  /// Returns null when readings are stale (no telemetry for 45s) so the UI
+  /// shows "--" instead of a frozen last value after the sensor is unplugged.
+  AhuTelemetry? getTelemetry(String ahuId) {
+    final telemetry = _telemetryData[ahuId];
+    if (telemetry == null) return null;
+    final at = _lastTelemetryAt[ahuId];
+    if (at != null &&
+        DateTime.now().difference(at) > const Duration(seconds: 45)) {
+      return null;
+    }
+    return telemetry;
+  }
 
   /// Get state for specific AHU
   AhuState? getState(String ahuId) => _stateData[ahuId];
@@ -295,6 +307,7 @@ class AppProvider extends ChangeNotifier {
       }
       _statusData[ahuId] = 'online';
       _lastSeenData[ahuId] = DateTime.now();
+      _lastTelemetryAt[ahuId] = DateTime.now();
       _telemetryData[ahuId] = entry.value;
       _debouncedNotify(); // 250ms debounce for RPi
     });
@@ -423,7 +436,8 @@ class AppProvider extends ChangeNotifier {
     _logData.remove(ahuId);
     _statusData.remove(ahuId);
     _lastSeenData.remove(ahuId);
-    _displayedAcph.remove(ahuId);
+    _lastTelemetryAt.remove(ahuId);
+    // Keep _displayedAcph so re-entry does not restart the header count.
     _ahuUnitsChanged = true;
     notifyListeners();
   }
@@ -437,8 +451,10 @@ class AppProvider extends ChangeNotifier {
     _logData.clear();
     _statusData.clear();
     _lastSeenData.clear();
+    _lastTelemetryAt.clear();
     _awsStatusData.clear(); // Also clear AWS status
-    _displayedAcph.clear();
+    // Keep _displayedAcph across login so the header ACPH only moves
+    // when fan speed / run state changes, not when navigating away.
     _cachedAhuUnits = null;
     _ahuUnitsChanged = true;
     notifyListeners();
@@ -770,10 +786,28 @@ class AppProvider extends ChangeNotifier {
     var changed = false;
     for (final ahuId in _ahuUnits.keys) {
       final target = _targetAcph(ahuId);
-      final current = _displayedAcph[ahuId] ?? 0;
+      // First sight (or after cold start): jump to target. Ramp only when
+      // fan speed / run state later moves the target away from current.
+      if (!_displayedAcph.containsKey(ahuId)) {
+        _displayedAcph[ahuId] = target;
+        changed = true;
+        continue;
+      }
+      final current = _displayedAcph[ahuId]!;
       if (current == target) continue;
       _displayedAcph[ahuId] = current < target ? current + 1 : current - 1;
       changed = true;
+    }
+    // Also refresh UI when telemetry has just gone stale.
+    for (final ahuId in _telemetryData.keys) {
+      final at = _lastTelemetryAt[ahuId];
+      if (at == null) continue;
+      final age = DateTime.now().difference(at);
+      if (age >= const Duration(seconds: 45) &&
+          age < const Duration(seconds: 50)) {
+        changed = true;
+        break;
+      }
     }
     if (changed) notifyListeners();
   }
