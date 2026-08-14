@@ -1423,7 +1423,7 @@ class _SensorControls extends StatelessWidget {
         ),
         canSendCommands: provider.canSendCommands,
         isLocked: provider.isScreenLocked,
-        acph: provider.getDisplayedAcph(ahuId),
+        acph: provider.getTargetAcph(ahuId),
       ),
       builder: (context, result, _) {
         final data = result.data;

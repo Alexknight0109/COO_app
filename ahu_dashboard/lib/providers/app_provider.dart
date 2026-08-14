@@ -197,8 +197,11 @@ class AppProvider extends ChangeNotifier {
   /// Get status for specific AHU
   String? getStatus(String ahuId) => _statusData[ahuId];
 
-  /// Showcase ACPH currently shown on the UI (+1 / -1 every 2s toward target).
+  /// Ramped ACPH for the header badge (+1 / -1 every 3s toward target).
   int getDisplayedAcph(String ahuId) => _displayedAcph[ahuId] ?? 0;
+
+  /// Instant target ACPH for the humidity card (20 / 30 / 40 / 0).
+  int getTargetAcph(String ahuId) => _targetAcph(ahuId);
 
   String _ahuVisibilityKey(AhuUnit ahu) => ahu.id;
   String _topicToAhuKey(String topicData) {
@@ -760,7 +763,7 @@ class AppProvider extends ChangeNotifier {
 
   void _ensureAcphTicker() {
     if (_acphTicker != null) return;
-    _acphTicker = Timer.periodic(const Duration(seconds: 2), (_) => _tickAcph());
+    _acphTicker = Timer.periodic(const Duration(seconds: 3), (_) => _tickAcph());
   }
 
   void _tickAcph() {
