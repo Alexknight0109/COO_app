@@ -44,6 +44,7 @@ void main() async {
   // Pre-load screen lock state before app starts
   final appProvider = AppProvider();
   await appProvider.loadScreenLockPasscode();
+  await appProvider.loadSavedAccount();
 
   runApp(AhuDashboardApp(appProvider: appProvider));
 }

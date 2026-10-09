@@ -9,6 +9,7 @@ import '../models/user_role.dart';
 import '../models/ahu_telemetry.dart';
 import '../models/ahu_state.dart';
 import '../models/ahu_log.dart';
+import '../widgets/aws_source_pill.dart';
 import '../widgets/motor_timing_dialog.dart';
 import '../widgets/wifi_control_widget.dart';
 import '../widgets/screen_lock_dialog.dart';
@@ -591,13 +592,15 @@ class _AhuStatusBadges extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Selector<AppProvider, ({bool isOnline, bool isRunning, bool isCloudConnected, int acph, String? version})>(
+    return Selector<AppProvider, ({bool isOnline, bool isRunning, bool isCloudConnected, bool isFromAws, int acph, String? version})>(
       selector: (_, provider) {
         final state = provider.getState(ahuId);
+        final fromAws = provider.isFromAws(ahuId);
         return (
           isOnline: provider.getStatus(ahuId) == 'online',
           isRunning: state?.run ?? false,
-          isCloudConnected: provider.isAwsConnected(ahuId),
+          isCloudConnected: fromAws || provider.isAwsConnected(ahuId),
+          isFromAws: fromAws,
           acph: provider.getDisplayedAcph(ahuId),
           version: state?.version,
         );
@@ -627,6 +630,7 @@ class _AhuStatusBadges extends StatelessWidget {
                 ),
               ],
             ),
+            if (data.isFromAws) const AwsSourcePill(visible: true, isSmall: true),
             // System Running Status
             _RunningBadge(isRunning: data.isRunning),
             // Cloud Connection Status
@@ -900,7 +904,7 @@ class _StartStopButton extends StatelessWidget {
     return Selector<AppProvider, ({bool isRunning, bool canSendCommands})>(
       selector: (_, provider) => (
         isRunning: provider.getState(ahuId)?.run ?? false,
-        canSendCommands: provider.canSendCommands,
+        canSendCommands: provider.canSendCommandsFor(ahuId),
       ),
       builder: (context, data, _) {
         final isRunning = data.isRunning;
@@ -1017,7 +1021,7 @@ class _CpModeToggleButton extends StatelessWidget {
         final state = provider.getState(ahuId);
         final cpMode = state?.cpMode ?? "dual";
         final cpActive = state?.cpActive ?? 1;
-        final canSendCommands = provider.canSendCommands;
+        final canSendCommands = provider.canSendCommandsFor(ahuId);
         final isLocked = provider.isScreenLocked;
         return (cpMode: cpMode, cpActive: cpActive, canSendCommands: canSendCommands, isLocked: isLocked);
       },
@@ -1421,7 +1425,7 @@ class _SensorControls extends StatelessWidget {
           telemetry: provider.getTelemetry(ahuId),
           state: provider.getState(ahuId),
         ),
-        canSendCommands: provider.canSendCommands,
+        canSendCommands: provider.canSendCommandsFor(ahuId),
         isLocked: provider.isScreenLocked,
         acph: provider.getTargetAcph(ahuId),
       ),
@@ -2089,7 +2093,7 @@ class _FanIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     return Selector<AppProvider, ({bool canSendCommands, bool isRunning})>(
       selector: (_, provider) => (
-        canSendCommands: provider.canSendCommands,
+        canSendCommands: provider.canSendCommandsFor(ahuId),
         isRunning: data.state?.run ?? false,
       ),
       builder: (context, info, _) {

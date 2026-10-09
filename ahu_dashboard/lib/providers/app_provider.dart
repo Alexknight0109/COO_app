@@ -7,6 +7,7 @@ import '../models/ahu_state.dart';
 import '../models/ahu_log.dart';
 import '../models/user_role.dart';
 import '../services/account_auth_service.dart';
+import '../services/aws_fallback_service.dart';
 import '../services/mqtt_service.dart';
 
 /// Main application state provider with optimized updates for RPi
@@ -35,9 +36,15 @@ class AppProvider extends ChangeNotifier {
   final Map<String, DateTime> _lastTelemetryAt = {};
   final Set<String> _hospitalVisibleAhuKeys = {};
   final Set<String> _hospitalHiddenAhuKeys = {};
-  final Set<String> _assignedAhuIds = {};
-  bool _accountRestricted = false;
-  bool _accountCanOperate = true;
+  /// Lower-cased assigned id -> id exactly as the web dashboard knows it.
+  final Map<String, String> _assignedAhuIds = {};
+  final AccountAuthService _accountAuth = AccountAuthService();
+  late final AwsFallbackService _awsFallback = AwsFallbackService(_accountAuth);
+  AccountSession? _accountSession;
+  final Map<String, DateTime> _lastLocalAt = {};
+  final Set<String> _awsSourced = {};
+  final Set<String> _awsOnlyAhus = {};
+  final Map<String, String> _cloudIdByAhu = {};
   bool _isConnected = false;
 
   // Cache for frequently accessed data
@@ -56,9 +63,7 @@ class AppProvider extends ChangeNotifier {
   static const String _lockStateKey = 'screen_lock_state';
   static const String _hospitalVisibleAhuKeysKey = 'hospital_visible_ahu_keys';
   static const String _hospitalHiddenAhuKeysKey = 'hospital_hidden_ahu_keys';
-  static const String _accountRestrictedKey = 'account_restricted';
-  static const String _accountAssignedKey = 'account_assigned_ahu_ids';
-  static const String _accountAccessKey = 'account_access_level';
+  static const Duration _localFreshWindow = Duration(seconds: 15);
 
   // Getters
   UserRole? get currentRole => _currentRole;
@@ -267,44 +272,117 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  /// Hospital and Administrator cards. Clears a previous account assignment.
   Future<void> setUserRole(UserRole role) async {
     _currentRole = role;
-    await _clearAccountRestriction();
     notifyListeners();
   }
 
-  /// Phone-style login. The dashboard then shows only [session.assignedAhuIds].
-  Future<void> applyAccountLogin(AccountSession session) async {
-    _currentRole = UserRole.hospital;
-    _accountRestricted = true;
-    _accountCanOperate = session.canOperate;
+  AccountSession? get accountSession => _accountSession;
+  bool get isAccountLoggedIn => _accountSession != null;
+
+  /// Restores the saved phone-style login so AWS fallback survives restarts.
+  Future<void> loadSavedAccount() async {
+    final session = await _accountAuth.loadSaved();
+    if (session != null) _activateAccount(session);
+  }
+
+  /// Phone-style login. Credentials stay saved until [logoutAccount].
+  Future<AccountAuthResult> loginAccount(String id, String password) async {
+    final result = await _accountAuth.login(id, password);
+    final session = result.session;
+    if (session != null) _activateAccount(session);
+    return result;
+  }
+
+  Future<void> logoutAccount() async {
+    _awsFallback.stop();
+    await _accountAuth.clear();
+    _accountSession = null;
+    _assignedAhuIds.clear();
+    for (final ahuId in _awsSourced.toList()) {
+      if (_awsOnlyAhus.contains(ahuId) && !_isLocalFresh(ahuId)) {
+        _ahuUnits.remove(ahuId);
+        _telemetryData.remove(ahuId);
+        _stateData.remove(ahuId);
+        _lastTelemetryAt.remove(ahuId);
+        _ahuUnitsChanged = true;
+      } else if (!_isLocalFresh(ahuId)) {
+        _statusData[ahuId] = 'offline';
+      }
+    }
+    _statusData.removeWhere((key, _) => !_ahuUnits.containsKey(key));
+    _awsSourced.clear();
+    _awsOnlyAhus.clear();
+    _cloudIdByAhu.clear();
+    notifyListeners();
+  }
+
+  void _activateAccount(AccountSession session) {
+    _accountSession = session;
     _assignedAhuIds
       ..clear()
-      ..addAll(session.assignedAhuIds.map((id) => id.trim().toLowerCase()));
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_accountRestrictedKey, true);
-      await prefs.setStringList(_accountAssignedKey, _assignedAhuIds.toList());
-      await prefs.setString(_accountAccessKey, session.accessLevel);
-    } catch (e) {
-      debugPrint('AppProvider: Error saving account login: $e');
-    }
+      ..addEntries(session.assignedAhuIds
+          .map((id) => MapEntry(id.trim().toLowerCase(), id.trim())));
+    _ensureAcphTicker();
+    _awsFallback.start(
+      deviceIds: _cloudIdsToPoll,
+      onReading: _applyCloudReading,
+    );
     notifyListeners();
   }
 
-  Future<void> _clearAccountRestriction() async {
-    _accountRestricted = false;
-    _accountCanOperate = true;
-    _assignedAhuIds.clear();
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_accountRestrictedKey);
-      await prefs.remove(_accountAssignedKey);
-      await prefs.remove(_accountAccessKey);
-    } catch (e) {
-      debugPrint('AppProvider: Error clearing account login: $e');
+  /// Assigned ids whose card has had no local MQTT for [_localFreshWindow].
+  Iterable<String> _cloudIdsToPoll() {
+    return _assignedAhuIds.values.where((cloudId) {
+      final localKeys = _cloudIdByAhu.entries
+          .where((e) => e.value == cloudId)
+          .map((e) => e.key);
+      return !localKeys.any(_isLocalFresh);
+    });
+  }
+
+  bool _isLocalFresh(String ahuId) {
+    if (!_isConnected) return false;
+    final at = _lastLocalAt[ahuId];
+    return at != null && DateTime.now().difference(at) < _localFreshWindow;
+  }
+
+  /// True while this card shows AWS data because local MQTT went quiet.
+  bool isFromAws(String ahuId) =>
+      _awsSourced.contains(ahuId) && !_isLocalFresh(ahuId);
+
+  void _markLocal(String topicData) {
+    final ahuId = _extractAhuId(topicData);
+    _lastLocalAt[ahuId] = DateTime.now();
+    _awsSourced.remove(ahuId);
+    final cloudId = _assignedIdFor(topicData);
+    if (cloudId != null) _cloudIdByAhu[ahuId] = cloudId;
+  }
+
+  void _applyCloudReading(AwsCloudReading reading) {
+    if (_accountSession == null) return;
+    final ahuId = _extractAhuId(reading.topicKey);
+    if (_isLocalFresh(ahuId)) return;
+
+    if (!_ahuUnits.containsKey(ahuId)) {
+      _ensureAhuRegistered(reading.topicKey);
+      _awsOnlyAhus.add(ahuId);
     }
+    _cloudIdByAhu[ahuId] = reading.deviceId;
+    _awsSourced.add(ahuId);
+
+    _statusData[ahuId] = reading.online ? 'online' : 'offline';
+    if (reading.online) _lastSeenData[ahuId] = DateTime.now();
+    final telemetry = reading.telemetry;
+    if (telemetry != null) {
+      _telemetryData[ahuId] = telemetry;
+      _lastTelemetryAt[ahuId] = reading.online
+          ? (reading.updatedAt ?? DateTime.now())
+          : DateTime.fromMillisecondsSinceEpoch(0);
+    }
+    final state = reading.state;
+    if (state != null) _stateData[ahuId] = state;
+    _debouncedStateNotify();
   }
 
   /// Initialize MQTT connection
@@ -344,11 +422,11 @@ class AppProvider extends ChangeNotifier {
 
     // Listen to telemetry updates - auto-register devices for multi-AHU discovery.
     _telemetrySubscription = _mqttService!.telemetryStream.listen((entry) {
-      if (!_allowTopic(entry.key)) return;
       final ahuId = _extractAhuId(entry.key);
       if (!_isMatchingAhu(entry.key)) {
         _ensureAhuRegistered(entry.key);
       }
+      _markLocal(entry.key);
       _statusData[ahuId] = 'online';
       _lastSeenData[ahuId] = DateTime.now();
       _lastTelemetryAt[ahuId] = DateTime.now();
@@ -358,13 +436,13 @@ class AppProvider extends ChangeNotifier {
 
     // Listen to state updates - auto-register devices that send state (dynamic discovery)
     _stateSubscription = _mqttService!.stateStream.listen((entry) {
-      if (!_allowTopic(entry.key)) return;
       final ahuId = _extractAhuId(entry.key);
       // Auto-register AHU if we receive state data (fallback for status topic issues)
       if (!_isMatchingAhu(entry.key)) {
         debugPrint('AppProvider: Auto-registering AHU from state message');
         _ensureAhuRegistered(entry.key);
       }
+      _markLocal(entry.key);
       _statusData[ahuId] = 'online'; // State traffic means device is alive.
       _lastSeenData[ahuId] = DateTime.now();
       _stateData[ahuId] = entry.value;
@@ -373,7 +451,6 @@ class AppProvider extends ChangeNotifier {
 
     // Listen to log updates - only process if device is registered
     _logSubscription = _mqttService!.logStream.listen((entry) {
-      if (!_allowTopic(entry.key)) return;
       if (!_isMatchingAhu(entry.key)) return; // Ignore unregistered devices
       final ahuId = _extractAhuId(entry.key);
 
@@ -389,9 +466,10 @@ class AppProvider extends ChangeNotifier {
 
     // Listen to status updates - register devices from either state (dynamic discovery)
     _statusSubscription = _mqttService!.statusStream.listen((entry) {
-      if (!_allowTopic(entry.key)) return;
       final ahuId = _extractAhuId(entry.key);
       final status = entry.value.trim().toLowerCase();
+      // A local retained/LWT status must not override live AWS readings.
+      if (isFromAws(ahuId)) return;
 
       if (status == 'online') {
         // Device is online - register if new.
@@ -415,7 +493,6 @@ class AppProvider extends ChangeNotifier {
 
     // Listen to AWS connection status updates
     _awsStatusSubscription = _mqttService!.awsStatusStream.listen((entry) {
-      if (!_allowTopic(entry.key)) return;
       if (!_isMatchingAhu(entry.key)) return; // Only process registered devices
       final ahuId = _extractAhuId(entry.key);
       _awsStatusData[ahuId] = entry.value;
@@ -485,6 +562,10 @@ class AppProvider extends ChangeNotifier {
     _statusData.remove(ahuId);
     _lastSeenData.remove(ahuId);
     _lastTelemetryAt.remove(ahuId);
+    _lastLocalAt.remove(ahuId);
+    _awsSourced.remove(ahuId);
+    _awsOnlyAhus.remove(ahuId);
+    _cloudIdByAhu.remove(ahuId);
     // Keep _displayedAcph so re-entry does not restart the header count.
     _ahuUnitsChanged = true;
     notifyListeners();
@@ -501,6 +582,10 @@ class AppProvider extends ChangeNotifier {
     _lastSeenData.clear();
     _lastTelemetryAt.clear();
     _awsStatusData.clear(); // Also clear AWS status
+    _lastLocalAt.clear();
+    _awsSourced.clear();
+    _awsOnlyAhus.clear();
+    _cloudIdByAhu.clear();
     // Keep _displayedAcph across login so the header ACPH only moves
     // when fan speed / run state changes, not when navigating away.
     _cachedAhuUnits = null;
@@ -525,15 +610,9 @@ class AppProvider extends ChangeNotifier {
     return _ahuUnits.containsKey(_topicToAhuKey(topicData));
   }
 
-  /// Account logins only keep AHUs assigned on the phone/web dashboard.
-  /// Hospital and Administrator cards leave this open.
-  bool _allowTopic(String topicData) {
-    if (!_accountRestricted) return true;
-    if (_isMatchingAhu(topicData)) return true;
-    return _matchesAssignment(topicData);
-  }
-
-  bool _matchesAssignment(String topicData) {
+  /// The web dashboard id assigned to this topic's AHU, if any.
+  String? _assignedIdFor(String topicData) {
+    if (_assignedAhuIds.isEmpty) return null;
     final parts = topicData.split('|');
     final ahuId = parts.isNotEmpty ? parts[0] : '';
     final site = parts.length > 1 ? parts[1] : '';
@@ -546,18 +625,15 @@ class AppProvider extends ChangeNotifier {
     ];
     for (final raw in candidates) {
       final id = raw.trim().toLowerCase();
-      if (id.isNotEmpty && _assignedAhuIds.contains(id)) return true;
+      if (id.isNotEmpty && _assignedAhuIds.containsKey(id)) {
+        return _assignedAhuIds[id];
+      }
     }
-    return false;
+    return null;
   }
 
   /// Auto-discover and register AHU when data arrives.
   void _ensureAhuRegistered(String topicData, {String? site, String? room}) {
-    if (_accountRestricted &&
-        !_matchesAssignment(topicData) &&
-        !_isMatchingAhu(topicData)) {
-      return;
-    }
     final parts = topicData.split('|');
     final ahuId = parts.isNotEmpty ? parts[0] : topicData;
     final discoveredSite = parts.length > 1 ? parts[1] : (site ?? 'unknown');
@@ -594,199 +670,93 @@ class AppProvider extends ChangeNotifier {
         'AppProvider: Auto-discovered AHU - $ahuId at $discoveredSite/$discoveredRoom');
   }
 
-  /// Check if MQTT is ready for commands
-  bool get canSendCommands =>
-      _mqttService != null && _isConnected && _accountCanOperate;
+  /// Local MQTT is ready for commands.
+  bool get canSendCommands => _mqttService != null && _isConnected;
 
-  /// Start AHU
-  bool startAhu(String ahuId) {
-    if (!canSendCommands) {
-      debugPrint('AppProvider: Cannot send start command - MQTT not connected');
-      return false;
+  /// Commands go to local MQTT, or through AWS while the card is fed from AWS
+  /// (operator accounts only).
+  bool canSendCommandsFor(String ahuId) {
+    if (isFromAws(ahuId)) {
+      return (_accountSession?.canOperate ?? false) &&
+          _cloudIdByAhu.containsKey(ahuId);
     }
-    final ahu = _ahuUnits[ahuId];
-    if (ahu != null) {
-      _mqttService!.startAhu(ahu);
-      debugPrint('AppProvider: Start command sent to ${ahu.cmdTopic}');
-      return true;
-    }
-    debugPrint('AppProvider: AHU $ahuId not found');
-    return false;
+    return canSendCommands;
   }
 
-  /// Stop AHU
-  bool stopAhu(String ahuId) {
-    if (!canSendCommands) {
-      debugPrint('AppProvider: Cannot send stop command - MQTT not connected');
+  bool _dispatch(
+    String ahuId,
+    Map<String, dynamic> command,
+    void Function(MqttService mqtt, AhuUnit ahu) viaMqtt,
+  ) {
+    final ahu = _ahuUnits[ahuId];
+    if (ahu == null) {
+      debugPrint('AppProvider: AHU $ahuId not found');
       return false;
     }
-    final ahu = _ahuUnits[ahuId];
-    if (ahu != null) {
-      _mqttService!.stopAhu(ahu);
-      debugPrint('AppProvider: Stop command sent to ${ahu.cmdTopic}');
+    if (!canSendCommandsFor(ahuId)) {
+      debugPrint('AppProvider: Cannot send $command to $ahuId - no route');
+      return false;
+    }
+    if (isFromAws(ahuId)) {
+      final cloudId = _cloudIdByAhu[ahuId]!;
+      _accountAuth.sendCommand(cloudId, command).then((ok) {
+        debugPrint(
+            'AppProvider: AWS command $command to $cloudId ${ok ? "sent" : "FAILED"}');
+      });
       return true;
     }
-    debugPrint('AppProvider: AHU $ahuId not found');
-    return false;
+    viaMqtt(_mqttService!, ahu);
+    debugPrint('AppProvider: Command $command sent to ${ahu.cmdTopic}');
+    return true;
   }
 
-  /// Toggle AHU
-  bool toggleAhu(String ahuId) {
-    if (!canSendCommands) {
-      debugPrint(
-          'AppProvider: Cannot send toggle command - MQTT not connected');
-      return false;
-    }
-    final ahu = _ahuUnits[ahuId];
-    if (ahu != null) {
-      _mqttService!.toggleAhu(ahu);
-      debugPrint('AppProvider: Toggle command sent to ${ahu.cmdTopic}');
-      return true;
-    }
-    debugPrint('AppProvider: AHU $ahuId not found');
-    return false;
-  }
+  bool startAhu(String ahuId) =>
+      _dispatch(ahuId, {'start': true}, (m, a) => m.startAhu(a));
 
-  /// Set temperature setpoint
-  bool setTemperature(String ahuId, double temp) {
-    if (!canSendCommands) {
-      debugPrint(
-          'AppProvider: Cannot send temperature command - MQTT not connected');
-      return false;
-    }
-    final ahu = _ahuUnits[ahuId];
-    if (ahu != null) {
-      _mqttService!.setTemperature(ahu, temp);
-      debugPrint(
-          'AppProvider: Temperature command ($temp) sent to ${ahu.cmdTopic}');
-      return true;
-    }
-    debugPrint('AppProvider: AHU $ahuId not found');
-    return false;
-  }
+  bool stopAhu(String ahuId) =>
+      _dispatch(ahuId, {'stop': true}, (m, a) => m.stopAhu(a));
 
-  /// Set humidity setpoint
-  bool setHumidity(String ahuId, double humidity) {
-    if (!canSendCommands) {
-      debugPrint(
-          'AppProvider: Cannot send humidity command - MQTT not connected');
-      return false;
-    }
-    final ahu = _ahuUnits[ahuId];
-    if (ahu != null) {
-      _mqttService!.setHumidity(ahu, humidity);
-      debugPrint(
-          'AppProvider: Humidity command ($humidity) sent to ${ahu.cmdTopic}');
-      return true;
-    }
-    debugPrint('AppProvider: AHU $ahuId not found');
-    return false;
-  }
+  bool toggleAhu(String ahuId) =>
+      _dispatch(ahuId, {'toggle': true}, (m, a) => m.toggleAhu(a));
+
+  bool setTemperature(String ahuId, double temp) => _dispatch(
+      ahuId, {'setpoint': temp}, (m, a) => m.setTemperature(a, temp));
+
+  bool setHumidity(String ahuId, double humidity) => _dispatch(
+      ahuId, {'humset': humidity}, (m, a) => m.setHumidity(a, humidity));
 
   /// Set fan speed (0=OFF, 1=LOW, 2=MED, 3=HIGH)
   bool setFanSpeed(String ahuId, int speed) {
-    if (!canSendCommands) {
-      debugPrint(
-          'AppProvider: Cannot send fan speed command - MQTT not connected');
-      return false;
-    }
-    final ahu = _ahuUnits[ahuId];
-    if (ahu != null) {
-      _mqttService!.setFanSpeed(ahu, speed);
-      debugPrint(
-          'AppProvider: Fan speed command ($speed) sent to ${ahu.cmdTopic}');
-      return true;
-    }
-    debugPrint('AppProvider: AHU $ahuId not found');
-    return false;
+    if (speed < 0 || speed > 3) return false;
+    return _dispatch(
+        ahuId, {'fan': speed}, (m, a) => m.setFanSpeed(a, speed));
   }
 
-  /// Toggle fan speed
-  bool toggleFanSpeed(String ahuId) {
-    if (!canSendCommands) {
-      debugPrint(
-          'AppProvider: Cannot send fan toggle command - MQTT not connected');
-      return false;
-    }
-    final ahu = _ahuUnits[ahuId];
-    if (ahu != null) {
-      _mqttService!.toggleFanSpeed(ahu);
-      debugPrint('AppProvider: Fan toggle command sent to ${ahu.cmdTopic}');
-      return true;
-    }
-    debugPrint('AppProvider: AHU $ahuId not found');
-    return false;
-  }
+  bool toggleFanSpeed(String ahuId) =>
+      _dispatch(ahuId, {'fanToggle': true}, (m, a) => m.toggleFanSpeed(a));
 
   /// Set operation mode (Admin only)
   bool setMode(String ahuId, bool onlineMode) {
     if (_currentRole != UserRole.admin) return false;
-    if (!canSendCommands) {
-      debugPrint('AppProvider: Cannot send mode command - MQTT not connected');
-      return false;
-    }
-    final ahu = _ahuUnits[ahuId];
-    if (ahu != null) {
-      _mqttService!.setMode(ahu, onlineMode);
-      debugPrint(
-          'AppProvider: Mode command (${onlineMode ? 'online' : 'offline'}) sent to ${ahu.cmdTopic}');
-      return true;
-    }
-    debugPrint('AppProvider: AHU $ahuId not found');
-    return false;
+    return _dispatch(
+      ahuId,
+      {'mode': onlineMode ? 'online' : 'offline'},
+      (m, a) => m.setMode(a, onlineMode),
+    );
   }
 
   /// Set CP mode (dual or single) - Available to all users
-  bool setCpMode(String ahuId, String mode) {
-    if (!canSendCommands) {
-      debugPrint(
-          'AppProvider: Cannot send CP mode command - MQTT not connected');
-      return false;
-    }
-    final ahu = _ahuUnits[ahuId];
-    if (ahu != null) {
-      _mqttService!.setCpMode(ahu, mode);
-      debugPrint(
-          'AppProvider: CP mode command ($mode) sent to ${ahu.cmdTopic}');
-      return true;
-    }
-    debugPrint('AppProvider: AHU $ahuId not found');
-    return false;
-  }
+  bool setCpMode(String ahuId, String mode) =>
+      _dispatch(ahuId, {'cpMode': mode}, (m, a) => m.setCpMode(a, mode));
 
   /// Set active CP (1 or 2) - Available to all users
-  bool setCpActive(String ahuId, int cpActive) {
-    if (!canSendCommands) {
-      debugPrint(
-          'AppProvider: Cannot send CP active command - MQTT not connected');
-      return false;
-    }
-    final ahu = _ahuUnits[ahuId];
-    if (ahu != null) {
-      _mqttService!.setCpActive(ahu, cpActive);
-      debugPrint(
-          'AppProvider: CP active command ($cpActive) sent to ${ahu.cmdTopic}');
-      return true;
-    }
-    debugPrint('AppProvider: AHU $ahuId not found');
-    return false;
-  }
+  bool setCpActive(String ahuId, int cpActive) => _dispatch(
+      ahuId, {'cpActive': cpActive}, (m, a) => m.setCpActive(a, cpActive));
 
   /// Reset ESP32 (Admin only) - same as pressing physical reset button
   bool resetEsp32(String ahuId) {
     if (_currentRole != UserRole.admin) return false;
-    if (!canSendCommands) {
-      debugPrint('AppProvider: Cannot send reset command - MQTT not connected');
-      return false;
-    }
-    final ahu = _ahuUnits[ahuId];
-    if (ahu != null) {
-      _mqttService!.resetEsp32(ahu);
-      debugPrint('AppProvider: Reset command sent to ${ahu.cmdTopic}');
-      return true;
-    }
-    debugPrint('AppProvider: AHU $ahuId not found');
-    return false;
+    return _dispatch(ahuId, {'reset': true}, (m, a) => m.resetEsp32(a));
   }
 
   /// Provision WiFi (admin only)
@@ -853,7 +823,7 @@ class AppProvider extends ChangeNotifier {
   /// Null means "hold the current number" — logging out clears the state maps,
   /// and treating that gap as a real target of 0 is what restarted the count.
   int? _liveTargetAcph(String ahuId) {
-    if (!_isConnected) return null;
+    if (!_isConnected && !isFromAws(ahuId)) return null;
     final status = _statusData[ahuId];
     if (status == null) return null;
     if (status != 'online') return 0;
@@ -904,6 +874,7 @@ class AppProvider extends ChangeNotifier {
     _debounceTimer?.cancel();
     _stateDebounceTimer?.cancel();
     _acphTicker?.cancel();
+    _awsFallback.stop();
     _cancelMqttSubscriptions();
     _mqttService?.dispose();
     super.dispose();

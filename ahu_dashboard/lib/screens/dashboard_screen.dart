@@ -9,6 +9,7 @@ import '../models/ahu_state.dart';
 import '../providers/app_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/aws_source_pill.dart';
 import 'ahu_control_screen.dart';
 import 'admin_screen.dart';
 import 'login_screen.dart';
@@ -381,12 +382,14 @@ class _AhuCardData {
   final AhuState? state;
   final String? status;
   final int displayedAcph;
+  final bool isFromAws;
 
   const _AhuCardData({
     required this.telemetry,
     required this.state,
     required this.status,
     required this.displayedAcph,
+    required this.isFromAws,
   });
 
   @override
@@ -397,10 +400,12 @@ class _AhuCardData {
           telemetry == other.telemetry &&
           state == other.state &&
           status == other.status &&
-          displayedAcph == other.displayedAcph;
+          displayedAcph == other.displayedAcph &&
+          isFromAws == other.isFromAws;
 
   @override
-  int get hashCode => Object.hash(telemetry, state, status, displayedAcph);
+  int get hashCode =>
+      Object.hash(telemetry, state, status, displayedAcph, isFromAws);
 }
 
 class _ModernAhuCard extends StatelessWidget {
@@ -417,6 +422,7 @@ class _ModernAhuCard extends StatelessWidget {
         state: provider.getState(ahu.id),
         status: provider.getStatus(ahu.id),
         displayedAcph: provider.getDisplayedAcph(ahu.id),
+        isFromAws: provider.isFromAws(ahu.id),
       ),
       builder: (context, data, _) {
         final isOnline = data.status == 'online';
@@ -452,7 +458,12 @@ class _ModernAhuCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Header with status
-                    _CardHeader(ahu: ahu, isOnline: isOnline, isSmallScreen: isSmallScreen),
+                    _CardHeader(
+                      ahu: ahu,
+                      isOnline: isOnline,
+                      isFromAws: data.isFromAws,
+                      isSmallScreen: isSmallScreen,
+                    ),
                     SizedBox(height: isSmallScreen ? 14 : 18),
                     // Sensors
                     _SensorRow(data: data, isSmallScreen: isSmallScreen),
@@ -473,9 +484,15 @@ class _ModernAhuCard extends StatelessWidget {
 class _CardHeader extends StatelessWidget {
   final AhuUnit ahu;
   final bool isOnline;
+  final bool isFromAws;
   final bool isSmallScreen;
-  
-  const _CardHeader({required this.ahu, required this.isOnline, this.isSmallScreen = false});
+
+  const _CardHeader({
+    required this.ahu,
+    required this.isOnline,
+    this.isFromAws = false,
+    this.isSmallScreen = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -508,6 +525,7 @@ class _CardHeader extends StatelessWidget {
             ],
           ),
         ),
+        AwsSourcePill(visible: isFromAws, isSmall: isSmallScreen),
         Container(
           padding: EdgeInsets.symmetric(
             horizontal: isSmallScreen ? 12 : 14, 

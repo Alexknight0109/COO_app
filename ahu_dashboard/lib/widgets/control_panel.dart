@@ -17,7 +17,7 @@ class ControlPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isRunning = state?.run ?? false;
-    final canSendCommands = context.watch<AppProvider>().canSendCommands;
+    final canSendCommands = context.watch<AppProvider>().canSendCommandsFor(ahuId);
 
     return Card(
       elevation: 2, // RPi: Reduced elevation

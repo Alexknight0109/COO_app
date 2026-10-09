@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../models/user_role.dart';
 import '../providers/app_provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/account_auth_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/account_login_dialog.dart';
 import '../widgets/passcode_dialog.dart';
@@ -29,7 +28,14 @@ class LoginScreen extends StatelessWidget {
           Positioned(
             top: isSmallScreen ? 8 : 48,
             right: isSmallScreen ? 12 : 24,
-            child: const _ThemeToggle(),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _AccountButton(),
+                SizedBox(width: 8),
+                _ThemeToggle(),
+              ],
+            ),
           ),
           
           // Content - optimized for 1024x600
@@ -90,8 +96,6 @@ class LoginScreen extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          const Expanded(child: _LoginEntryButton(compact: true)),
                         ],
                       )
                     else
@@ -112,8 +116,6 @@ class LoginScreen extends StatelessWidget {
                               colors: [Color(0xFF60A5FA), Color(0xFF3B82F6)],
                             ),
                           ),
-                          SizedBox(height: 20),
-                          _LoginEntryButton(compact: false),
                         ],
                       ),
                     
@@ -267,6 +269,85 @@ class _ThemeToggle extends StatelessWidget {
   }
 }
 
+/// Small account icon beside the theme toggle. Opens login, or the account
+/// popup with Logout once a login is saved.
+class _AccountButton extends StatelessWidget {
+  const _AccountButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isSmallScreen = screenHeight < 650;
+
+    return Selector<AppProvider, bool>(
+      selector: (_, provider) => provider.isAccountLoggedIn,
+      builder: (context, loggedIn, _) {
+        final theme = Theme.of(context);
+        final radius = BorderRadius.circular(isSmallScreen ? 10 : 16);
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          decoration: BoxDecoration(
+            color: loggedIn ? null : theme.cardColor,
+            gradient: loggedIn
+                ? const LinearGradient(
+                    colors: [Color(0xFF3B82F6), Color(0xFF6366F1)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            borderRadius: radius,
+            border: Border.all(
+              color: loggedIn
+                  ? Colors.transparent
+                  : theme.dividerColor.withOpacity(0.1),
+            ),
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              IconButton(
+                iconSize: isSmallScreen ? 20 : 24,
+                padding: EdgeInsets.all(isSmallScreen ? 6 : 8),
+                constraints: BoxConstraints(
+                  minWidth: isSmallScreen ? 32 : 48,
+                  minHeight: isSmallScreen ? 32 : 48,
+                ),
+                icon: Icon(
+                  loggedIn
+                      ? Icons.person_rounded
+                      : Icons.person_outline_rounded,
+                  color: loggedIn ? Colors.white : theme.colorScheme.primary,
+                ),
+                tooltip: loggedIn ? 'Account' : 'Login',
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => loggedIn
+                      ? const AccountInfoDialog()
+                      : const AccountLoginDialog(),
+                ),
+              ),
+              if (loggedIn)
+                Positioned(
+                  right: 3,
+                  top: 3,
+                  child: Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF22C55E),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Compact role card for 7-inch Pi display (side by side layout)
 class _CompactRoleCard extends StatelessWidget {
   final UserRole role;
@@ -344,79 +425,6 @@ class _CompactRoleCard extends StatelessWidget {
 
     if (!context.mounted) return;
     await _enterDashboard(context, role: role);
-  }
-}
-
-class _LoginEntryButton extends StatelessWidget {
-  final bool compact;
-
-  const _LoginEntryButton({required this.compact});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final borderColor = theme.dividerColor.withOpacity(0.1);
-
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: compact ? double.infinity : 500),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _openLogin(context),
-          borderRadius: BorderRadius.circular(compact ? 16 : 20),
-          child: Container(
-            width: double.infinity,
-            padding: EdgeInsets.all(compact ? 16 : 20),
-            decoration: BoxDecoration(
-              color: theme.cardColor,
-              borderRadius: BorderRadius.circular(compact ? 16 : 20),
-              border: Border.all(color: borderColor),
-            ),
-            child: compact
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.login_rounded, color: Colors.white, size: 26),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Login',
-                        style: theme.textTheme.displayMedium?.copyWith(fontSize: 14),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.login_rounded, color: theme.colorScheme.primary),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Login',
-                        style: theme.textTheme.displayMedium?.copyWith(fontSize: 20),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openLogin(BuildContext context) async {
-    final session = await showDialog<AccountSession>(
-      context: context,
-      builder: (context) => const AccountLoginDialog(),
-    );
-    if (session == null || !context.mounted) return;
-    await _enterDashboard(context, role: UserRole.hospital, account: session);
   }
 }
 
@@ -510,7 +518,6 @@ class _ModernRoleCard extends StatelessWidget {
 Future<void> _enterDashboard(
   BuildContext context, {
   required UserRole role,
-  AccountSession? account,
 }) async {
   final provider = Provider.of<AppProvider>(context, listen: false);
 
@@ -522,11 +529,7 @@ Future<void> _enterDashboard(
     );
   }
 
-  if (account != null) {
-    await provider.applyAccountLogin(account);
-  } else {
-    await provider.setUserRole(role);
-  }
+  await provider.setUserRole(role);
   provider.loadDefaultAhus();
   provider.initializeMqtt();
 
