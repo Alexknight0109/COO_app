@@ -83,7 +83,31 @@ def get_current_version():
     return current_version
 
 
-def publish_status(status, message, progress=None):
+APP_VERSION_BASE = '1.0'
+
+
+def version_info():
+    """(version, commit) shown on the dashboard: 1.0.<commit count>, short hash."""
+    try:
+        count = subprocess.run(
+            ['git', 'rev-list', '--count', 'HEAD'],
+            cwd=DASHBOARD_DIR, capture_output=True, text=True, timeout=10
+        ).stdout.strip()
+        commit = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            cwd=DASHBOARD_DIR, capture_output=True, text=True, timeout=10
+        ).stdout.strip()
+        return f"{APP_VERSION_BASE}.{count or 0}", commit
+    except Exception:
+        return f"{APP_VERSION_BASE}.0", ''
+
+
+def version_label():
+    version, commit = version_info()
+    return f"v{version} · {commit}" if commit else f"v{version}"
+
+
+def publish_status(status, message, progress=None, **extra):
     """Publish OTA status to MQTT (ESP32 will relay to AWS)"""
     global mqtt_client, current_version
     
@@ -97,6 +121,7 @@ def publish_status(status, message, progress=None):
         'current_version': current_version,
         'timestamp': datetime.utcnow().isoformat()
     }
+    payload.update(extra)
     
     if progress is not None:
         payload['progress'] = progress
@@ -178,26 +203,70 @@ def _flutter_env():
     return env
 
 
-def run_flutter_build():
-    """Rebuild the Linux bundle the kiosk actually launches."""
+BUILD_TIMEOUT_S = 1800
+# Typical Radxa release build time; progress eases toward 95% around this mark.
+BUILD_EXPECTED_S = 240
+
+
+def run_flutter_build(progress_start=None, progress_end=None):
+    """Rebuild the Linux bundle the kiosk launches, stamping the version.
+
+    When a progress range is given, publishes 'building' every few seconds so
+    the dashboard can show a live bar during the multi-minute build.
+    """
     project = flutter_project_dir()
+    env = _flutter_env()
     logger.info(f"Building Linux bundle in {project}")
     try:
-        result = subprocess.run(
-            [FLUTTER_BIN, 'build', 'linux', '--release'],
-            cwd=project,
-            capture_output=True, text=True, timeout=1800,
-            env=_flutter_env(),
+        pub = subprocess.run(
+            [FLUTTER_BIN, 'pub', 'get'],
+            cwd=project, capture_output=True, text=True, timeout=600, env=env,
         )
-        if result.returncode == 0:
+        if pub.returncode != 0:
+            tail = (pub.stderr or pub.stdout or 'pub get failed')[-500:]
+            logger.error(f"flutter pub get failed: {tail}")
+            return False, tail
+
+        version, commit = version_info()
+        cmd = [
+            FLUTTER_BIN, 'build', 'linux', '--release',
+            f'--dart-define=APP_VERSION={version}',
+            f'--dart-define=APP_COMMIT={commit}',
+        ]
+        proc = subprocess.Popen(
+            cmd, cwd=project, env=env,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        )
+        output = []
+        reader = threading.Thread(
+            target=lambda: output.extend(proc.stdout), daemon=True
+        )
+        reader.start()
+
+        started = time.time()
+        while proc.poll() is None:
+            elapsed = time.time() - started
+            if elapsed > BUILD_TIMEOUT_S:
+                proc.kill()
+                logger.error("Flutter build timed out")
+                return False, "Flutter build timed out"
+            if progress_start is not None and progress_end is not None:
+                fraction = min(elapsed / BUILD_EXPECTED_S, 1.0) * 0.95
+                pct = int(progress_start + (progress_end - progress_start) * fraction)
+                publish_status(
+                    'building',
+                    f'Building new version... {int(elapsed // 60)}m {int(elapsed % 60):02d}s',
+                    progress=pct,
+                )
+            time.sleep(5)
+        reader.join(timeout=5)
+
+        if proc.returncode == 0:
             logger.info("Flutter linux build succeeded")
             return True, "Linux bundle built"
-        tail = (result.stderr or result.stdout or 'build failed')[-500:]
+        tail = ''.join(output)[-500:] or 'build failed'
         logger.error(f"Flutter build failed: {tail}")
         return False, tail
-    except subprocess.TimeoutExpired:
-        logger.error("Flutter build timed out")
-        return False, "Flutter build timed out"
     except Exception as e:
         logger.error(f"Flutter build error: {e}")
         return False, str(e)
@@ -210,6 +279,12 @@ def _relaunch_kiosk():
     if not os.path.isfile(launcher):
         return False, f"Kiosk launcher not found at {launcher}"
     subprocess.run(['pkill', '-x', 'ahu_dashboard'], check=False)
+    # launch_kiosk.sh refuses to start while an old copy is still exiting.
+    for _ in range(25):
+        if subprocess.run(['pgrep', '-x', 'ahu_dashboard'],
+                          capture_output=True).returncode != 0:
+            break
+        time.sleep(0.2)
     env = os.environ.copy()
     env['DISPLAY'] = os.getenv('DISPLAY', ':0')
     env['ALMED_KIOSK_BOOT_DELAY'] = '0'
@@ -248,8 +323,23 @@ def restart_dashboard():
         return _relaunch_kiosk()
 
 
-def perform_update():
-    """Perform git pull and restart dashboard"""
+def _running_is_stale(running_commit):
+    """True when the dashboard reports an older build than the checked-out code
+    (e.g. someone ran git pull by hand without rebuilding)."""
+    if not running_commit:
+        return False
+    head = current_version
+    return bool(head) and head != 'unknown' and not (
+        head.startswith(running_commit) or running_commit.startswith(head)
+    )
+
+
+def perform_update(confirm_restart=False, running_commit=None):
+    """Pull, rebuild, then restart the dashboard.
+
+    With confirm_restart (sent by the dashboard's update button) it stops after
+    the build with 'ready_to_restart' so the user chooses when to restart.
+    """
     global update_in_progress
     
     if update_in_progress:
@@ -263,7 +353,7 @@ def perform_update():
         publish_status('starting', 'Starting update...', progress=0)
         
         # Step 2: Git pull
-        publish_status('pulling', f'Running git pull origin {GIT_BRANCH}...', progress=20)
+        publish_status('pulling', 'Downloading update...', progress=10)
         success, message = run_git_pull()
         
         if not success:
@@ -272,19 +362,30 @@ def perform_update():
         
         if 'Already up to date' in message:
             get_current_version()
-            publish_status('up_to_date', 'Already up to date', progress=100)
-            return True
+            if not _running_is_stale(running_commit):
+                publish_status('up_to_date', 'Already up to date', progress=100)
+                return True
         
-        publish_status('pulled', 'Code updated successfully', progress=40)
+        publish_status('pulled', 'Code downloaded', progress=25)
 
         old_version = current_version
         get_current_version()
 
-        publish_status('building', 'Building Linux dashboard...', progress=55)
-        success, message = run_flutter_build()
+        publish_status('building', 'Building new version...', progress=30)
+        success, message = run_flutter_build(progress_start=30, progress_end=98)
         if not success:
             publish_status('error', f'Flutter build failed: {message}')
             return False
+
+        if confirm_restart:
+            label = version_label()
+            publish_status(
+                'ready_to_restart',
+                f'{label} is ready. Restart to use it.',
+                progress=100,
+                new_version=label,
+            )
+            return True
 
         publish_status('restarting', 'Restarting dashboard...', progress=85)
         success, message = restart_dashboard()
@@ -312,7 +413,7 @@ def perform_update():
         update_in_progress = False
 
 
-def check_for_updates():
+def check_for_updates(running_commit=None):
     """Check if there are updates available (git fetch)"""
     publish_status('checking', 'Checking for updates...')
     
@@ -353,6 +454,8 @@ def check_for_updates():
 
         if commits_behind > 0:
             publish_status('update_available', f'Update available! {commits_behind} new commits')
+        elif _running_is_stale(running_commit):
+            publish_status('update_available', 'Downloaded update not installed yet')
         else:
             publish_status('up_to_date', f'Already on latest version: {current_version}')
             
@@ -397,11 +500,22 @@ def on_message(client, userdata, msg):
         
         if command in ['ota_update', 'update', 'pull']:
             logger.info("🔄 Received update command - starting git pull...")
-            threading.Thread(target=perform_update, daemon=True).start()
+            threading.Thread(
+                target=perform_update,
+                kwargs={
+                    'confirm_restart': bool(data.get('confirm_restart')),
+                    'running_commit': data.get('running_commit'),
+                },
+                daemon=True,
+            ).start()
             
         elif command in ['check_update', 'check']:
             logger.info("🔍 Received check command...")
-            threading.Thread(target=check_for_updates, daemon=True).start()
+            threading.Thread(
+                target=check_for_updates,
+                kwargs={'running_commit': data.get('running_commit')},
+                daemon=True,
+            ).start()
             
         elif command == 'restart':
             logger.info("🔄 Received restart command...")

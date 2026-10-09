@@ -4,7 +4,9 @@ import '../models/user_role.dart';
 import '../providers/app_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_theme.dart';
+import '../services/app_version.dart';
 import '../widgets/account_login_dialog.dart';
+import '../widgets/update_progress_dialog.dart';
 import '../widgets/passcode_dialog.dart';
 import 'dashboard_screen.dart';
 
@@ -120,12 +122,7 @@ class LoginScreen extends StatelessWidget {
                       ),
                     
                     SizedBox(height: isSmallScreen ? 16 : 48),
-                    Text(
-                      'v1.0.0',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontSize: isSmallScreen ? 10 : 14,
-                      ),
-                    ),
+                    _VersionLabel(isSmallScreen: isSmallScreen),
                   ],
                 ),
               ),
@@ -265,6 +262,45 @@ class _ThemeToggle extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Build version at the bottom; also shows the "Dashboard updated" popup on
+/// the first launch after an update.
+class _VersionLabel extends StatefulWidget {
+  final bool isSmallScreen;
+
+  const _VersionLabel({required this.isSmallScreen});
+
+  @override
+  State<_VersionLabel> createState() => _VersionLabelState();
+}
+
+class _VersionLabelState extends State<_VersionLabel> {
+  @override
+  void initState() {
+    super.initState();
+    final from = AppVersion.updatedFrom;
+    if (from != null) {
+      AppVersion.updatedFrom = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          builder: (_) => UpdatedNoticeDialog(from: from),
+        );
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      AppVersion.label,
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontSize: widget.isSmallScreen ? 10 : 14,
+          ),
     );
   }
 }

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'providers/app_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/login_screen.dart';
+import 'services/app_version.dart';
 import 'theme/app_theme.dart';
 
 /// Detect if running on Raspberry Pi for performance optimizations
@@ -45,6 +46,7 @@ void main() async {
   final appProvider = AppProvider();
   await appProvider.loadScreenLockPasscode();
   await appProvider.loadSavedAccount();
+  await AppVersion.load();
 
   runApp(AhuDashboardApp(appProvider: appProvider));
 }

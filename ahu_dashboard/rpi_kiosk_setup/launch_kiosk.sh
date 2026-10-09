@@ -19,6 +19,19 @@ APP_PATH="${ALMED_APP_PATH:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 # Wait for desktop compositor (Radxa KDE can be slower on cold boot).
 sleep "${ALMED_KIOSK_BOOT_DELAY:-10}"
 
+# In-app "Restart now" after an update: let the old dashboard exit first.
+if [ -n "$ALMED_KIOSK_WAIT_PID" ]; then
+    for _ in $(seq 1 50); do
+        kill -0 "$ALMED_KIOSK_WAIT_PID" 2>/dev/null || break
+        sleep 0.2
+    done
+fi
+
+if pgrep -x ahu_dashboard >/dev/null 2>&1; then
+    echo "Dashboard already running; not starting a second copy."
+    exit 0
+fi
+
 # Disable screen blanking and power management
 export DISPLAY=:0
 

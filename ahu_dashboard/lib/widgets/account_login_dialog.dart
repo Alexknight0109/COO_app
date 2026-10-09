@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/app_provider.dart';
-import '../services/dashboard_update_service.dart';
+import 'update_progress_dialog.dart';
 
 const _accentGradient = LinearGradient(
   colors: [Color(0xFF3B82F6), Color(0xFF6366F1)],
@@ -455,45 +455,20 @@ class _MessageBanner extends StatelessWidget {
   }
 }
 
-/// Checks this Radxa for a dashboard update and installs it.
-class _UpdateIconButton extends StatefulWidget {
+/// Opens the update progress dialog (check, download, install, restart).
+class _UpdateIconButton extends StatelessWidget {
   const _UpdateIconButton();
-
-  @override
-  State<_UpdateIconButton> createState() => _UpdateIconButtonState();
-}
-
-class _UpdateIconButtonState extends State<_UpdateIconButton> {
-  final _updates = DashboardUpdateService();
-  bool _updating = false;
-
-  Future<void> _checkUpdate() async {
-    if (_updating) return;
-    setState(() => _updating = true);
-    final message = await _updates.checkAndUpdate();
-    if (!mounted) return;
-    setState(() => _updating = false);
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
       tooltip: 'Check for update',
-      onPressed: _updating ? null : _checkUpdate,
-      icon: _updating
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(
-              Icons.system_update_alt_rounded,
-              size: 20,
-              color: Theme.of(context).colorScheme.primary,
-            ),
+      onPressed: () => UpdateProgressDialog.show(context),
+      icon: Icon(
+        Icons.system_update_alt_rounded,
+        size: 20,
+        color: Theme.of(context).colorScheme.primary,
+      ),
     );
   }
 }
