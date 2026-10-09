@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../models/user_role.dart';
 import '../providers/app_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/account_auth_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/account_login_dialog.dart';
 import '../widgets/passcode_dialog.dart';
 import 'dashboard_screen.dart';
 
@@ -67,6 +69,7 @@ class LoginScreen extends StatelessWidget {
                     // Role cards - side by side on Pi display for better fit
                     if (isSmallScreen)
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
                             child: _CompactRoleCard(
@@ -77,7 +80,7 @@ class LoginScreen extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: _CompactRoleCard(
                               role: UserRole.admin,
@@ -87,6 +90,8 @@ class LoginScreen extends StatelessWidget {
                               ),
                             ),
                           ),
+                          const SizedBox(width: 12),
+                          const Expanded(child: _LoginEntryButton(compact: true)),
                         ],
                       )
                     else
@@ -107,6 +112,8 @@ class LoginScreen extends StatelessWidget {
                               colors: [Color(0xFF60A5FA), Color(0xFF3B82F6)],
                             ),
                           ),
+                          SizedBox(height: 20),
+                          _LoginEntryButton(compact: false),
                         ],
                       ),
                     
@@ -331,35 +338,85 @@ class _CompactRoleCard extends StatelessWidget {
         barrierDismissible: false,
         builder: (context) => const PasscodeDialog(),
       );
-      
+
       if (result != true) return;
     }
-    
-    final provider = Provider.of<AppProvider>(context, listen: false);
 
-    if (context.mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const _LoadingDialog(),
-      );
-    }
+    if (!context.mounted) return;
+    await _enterDashboard(context, role: role);
+  }
+}
 
-    provider.setUserRole(role);
-    provider.loadDefaultAhus();
-    
-    // Start MQTT connection but don't wait - it will auto-reconnect in background
-    // This prevents UI lag on startup
-    provider.initializeMqtt();
+class _LoginEntryButton extends StatelessWidget {
+  final bool compact;
 
-    if (context.mounted) {
-      Navigator.of(context).pop();
-      
-      // Always navigate to dashboard - MQTT will connect/reconnect in background
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const DashboardScreen()),
-      );
-    }
+  const _LoginEntryButton({required this.compact});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final borderColor = theme.dividerColor.withOpacity(0.1);
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: compact ? double.infinity : 500),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _openLogin(context),
+          borderRadius: BorderRadius.circular(compact ? 16 : 20),
+          child: Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(compact ? 16 : 20),
+            decoration: BoxDecoration(
+              color: theme.cardColor,
+              borderRadius: BorderRadius.circular(compact ? 16 : 20),
+              border: Border.all(color: borderColor),
+            ),
+            child: compact
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.login_rounded, color: Colors.white, size: 26),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Login',
+                        style: theme.textTheme.displayMedium?.copyWith(fontSize: 14),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.login_rounded, color: theme.colorScheme.primary),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Login',
+                        style: theme.textTheme.displayMedium?.copyWith(fontSize: 20),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openLogin(BuildContext context) async {
+    final session = await showDialog<AccountSession>(
+      context: context,
+      builder: (context) => const AccountLoginDialog(),
+    );
+    if (session == null || !context.mounted) return;
+    await _enterDashboard(context, role: UserRole.hospital, account: session);
   }
 }
 
@@ -441,35 +498,43 @@ class _ModernRoleCard extends StatelessWidget {
         barrierDismissible: false,
         builder: (context) => const PasscodeDialog(),
       );
-      
+
       if (result != true) return;
     }
-    
-    final provider = Provider.of<AppProvider>(context, listen: false);
 
-    if (context.mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const _LoadingDialog(),
-      );
-    }
+    if (!context.mounted) return;
+    await _enterDashboard(context, role: role);
+  }
+}
 
-    provider.setUserRole(role);
-    provider.loadDefaultAhus();
-    
-    // Start MQTT connection but don't wait - it will auto-reconnect in background
-    // This prevents UI lag on startup
-    provider.initializeMqtt();
+Future<void> _enterDashboard(
+  BuildContext context, {
+  required UserRole role,
+  AccountSession? account,
+}) async {
+  final provider = Provider.of<AppProvider>(context, listen: false);
 
-    if (context.mounted) {
-      Navigator.of(context).pop();
-      
-      // Always navigate to dashboard - MQTT will connect/reconnect in background
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const DashboardScreen()),
-      );
-    }
+  if (context.mounted) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const _LoadingDialog(),
+    );
+  }
+
+  if (account != null) {
+    await provider.applyAccountLogin(account);
+  } else {
+    await provider.setUserRole(role);
+  }
+  provider.loadDefaultAhus();
+  provider.initializeMqtt();
+
+  if (context.mounted) {
+    Navigator.of(context).pop();
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => const DashboardScreen()),
+    );
   }
 }
 

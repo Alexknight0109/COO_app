@@ -27,9 +27,9 @@ cat > /etc/default/ahu-ota-updater << 'EOF'
 # RPi OTA Updater Configuration
 MQTT_BROKER=localhost
 MQTT_PORT=1883
-MQTT_USERNAME=ahu_user
-MQTT_PASSWORD=ahu_pass_2024
-DASHBOARD_DIR=/home/almed/Documents/almed_ahu
+MQTT_USERNAME=almed
+MQTT_PASSWORD=Almed1234$
+DASHBOARD_DIR=/home/radxa/COO_app
 FLUTTER_PI_SERVICE=ahu-dashboard
 GIT_BRANCH=main
 EOF

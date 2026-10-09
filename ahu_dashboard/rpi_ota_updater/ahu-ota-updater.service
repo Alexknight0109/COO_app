@@ -17,9 +17,9 @@ StandardError=journal
 # Environment variables (can be overridden in /etc/default/ahu-ota-updater)
 Environment="MQTT_BROKER=localhost"
 Environment="MQTT_PORT=1883"
-Environment="MQTT_USERNAME=ahu_user"
-Environment="MQTT_PASSWORD=ahu_pass_2024"
-Environment="DASHBOARD_DIR=/home/almed/Documents/almed_ahu"
+Environment="MQTT_USERNAME=almed"
+Environment="MQTT_PASSWORD=Almed1234$"
+Environment="DASHBOARD_DIR=/home/radxa/COO_app"
 Environment="FLUTTER_PI_SERVICE=ahu-dashboard"
 Environment="GITHUB_REPO_OWNER=ESPUpdaterzaid"
 Environment="GITHUB_REPO_NAME=almed-rpi-dashboard"

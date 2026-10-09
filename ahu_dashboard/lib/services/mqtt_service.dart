@@ -294,15 +294,17 @@ class MqttService {
     final room = parts[parts.length - 3];
     final siteParts = parts.sublist(2, parts.length - 3);
     final site = siteParts.isNotEmpty ? siteParts.join('/') : 'hospitalA';
-    final topicData = '$ahuId|$site|$room';
+    var topicData = '$ahuId|$site|$room';
     final now = DateTime.now().millisecondsSinceEpoch;
 
     try {
       if (topic.endsWith('/telemetry')) {
         final data = jsonDecode(payloadString) as Map<String, dynamic>;
+        topicData = _topicKey(ahuId, site, room, data);
         _telemetryController.add(MapEntry(topicData, AhuTelemetry.fromJson(data)));
       } else if (topic.endsWith('/state')) {
         final data = jsonDecode(payloadString) as Map<String, dynamic>;
+        topicData = _topicKey(ahuId, site, room, data);
         _stateController.add(MapEntry(topicData, AhuState.fromJson(data)));
         // Log state changes (when run state changes)
         final runState = data['run'] ?? false;
@@ -316,6 +318,7 @@ class MqttService {
         try {
           // Try to parse as JSON first
           final data = jsonDecode(payloadString) as Map<String, dynamic>;
+          topicData = _topicKey(ahuId, site, room, data);
           final logEntry = AhuLog.fromJson(data);
           _logController.add(MapEntry(topicData, logEntry));
           debugPrint('MQTT: Log received (JSON) from $topic: ${logEntry.msg}');
@@ -333,6 +336,7 @@ class MqttService {
         // Handle AWS IoT connection status from ESP32
         try {
           final data = jsonDecode(payloadString) as Map<String, dynamic>;
+          topicData = _topicKey(ahuId, site, room, data);
           final connected = data['connected'] as bool? ?? false;
           _awsStatusController.add(MapEntry(topicData, connected));
           debugPrint('MQTT: AWS status received from $ahuId: ${connected ? "CONNECTED" : "DISCONNECTED"}');
@@ -403,6 +407,17 @@ class MqttService {
     _statusController.close();
     _connectionController.close();
     _awsStatusController.close();
+  }
+
+  String _topicKey(
+    String ahuId,
+    String site,
+    String room,
+    Map<String, dynamic> data,
+  ) {
+    final thing = data['thing']?.toString().trim() ?? '';
+    if (thing.isEmpty) return '$ahuId|$site|$room';
+    return '$ahuId|$site|$room|$thing';
   }
 
   void _subscribeRootTopics() {

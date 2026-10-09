@@ -10,6 +10,7 @@ import json
 import time
 import subprocess
 import logging
+import threading
 import paho.mqtt.client as mqtt
 from datetime import datetime
 
@@ -18,8 +19,8 @@ from datetime import datetime
 # MQTT Configuration - local broker (ESP32 hotspot network)
 MQTT_BROKER = os.getenv('MQTT_BROKER', 'localhost')
 MQTT_PORT = int(os.getenv('MQTT_PORT', '1883'))
-MQTT_USERNAME = os.getenv('MQTT_USERNAME', 'ahu_user')
-MQTT_PASSWORD = os.getenv('MQTT_PASSWORD', 'ahu_pass_2024')
+MQTT_USERNAME = os.getenv('MQTT_USERNAME', 'almed')
+MQTT_PASSWORD = os.getenv('MQTT_PASSWORD', 'Almed1234$')
 MQTT_CLIENT_ID = f"rpi_ota_updater_{int(time.time())}"
 
 # MQTT Topics
@@ -27,8 +28,9 @@ MQTT_TOPIC_COMMAND = 'almed/rpi/ota/command'   # Subscribe: receive OTA commands
 MQTT_TOPIC_STATUS = 'almed/rpi/ota/status'      # Publish: report OTA status
 
 # Dashboard Configuration
-DASHBOARD_DIR = os.getenv('DASHBOARD_DIR', '/home/almed/Documents/almed_ahu')
+DASHBOARD_DIR = os.getenv('DASHBOARD_DIR', '/home/radxa/COO_app')
 FLUTTER_PI_SERVICE = os.getenv('FLUTTER_PI_SERVICE', 'ahu-dashboard')
+FLUTTER_BIN = os.getenv('FLUTTER_BIN', 'flutter')
 GIT_BRANCH = os.getenv('GIT_BRANCH', 'main')
 
 # Logging Configuration
@@ -154,29 +156,96 @@ def run_git_pull():
         return False, str(e)
 
 
+def flutter_project_dir():
+    """Flutter package directory. COO_app keeps it under ahu_dashboard/."""
+    nested = os.path.join(DASHBOARD_DIR, 'ahu_dashboard')
+    if os.path.isfile(os.path.join(nested, 'pubspec.yaml')):
+        return nested
+    return DASHBOARD_DIR
+
+
+def _flutter_env():
+    env = os.environ.copy()
+    home = os.path.expanduser('~')
+    extra = [
+        os.path.join(home, 'flutter', 'bin'),
+        os.path.join(home, 'development', 'flutter', 'bin'),
+        os.path.join(home, 'snap', 'flutter', 'common', 'flutter', 'bin'),
+        '/opt/flutter/bin',
+        '/usr/local/bin',
+    ]
+    env['PATH'] = os.pathsep.join(extra + [env.get('PATH', '')])
+    return env
+
+
+def run_flutter_build():
+    """Rebuild the Linux bundle the kiosk actually launches."""
+    project = flutter_project_dir()
+    logger.info(f"Building Linux bundle in {project}")
+    try:
+        result = subprocess.run(
+            [FLUTTER_BIN, 'build', 'linux', '--release'],
+            cwd=project,
+            capture_output=True, text=True, timeout=1800,
+            env=_flutter_env(),
+        )
+        if result.returncode == 0:
+            logger.info("Flutter linux build succeeded")
+            return True, "Linux bundle built"
+        tail = (result.stderr or result.stdout or 'build failed')[-500:]
+        logger.error(f"Flutter build failed: {tail}")
+        return False, tail
+    except subprocess.TimeoutExpired:
+        logger.error("Flutter build timed out")
+        return False, "Flutter build timed out"
+    except Exception as e:
+        logger.error(f"Flutter build error: {e}")
+        return False, str(e)
+
+
+def _relaunch_kiosk():
+    """Start the autostart launcher when no systemd dashboard service exists."""
+    project = flutter_project_dir()
+    launcher = os.path.join(project, 'rpi_kiosk_setup', 'launch_kiosk.sh')
+    if not os.path.isfile(launcher):
+        return False, f"Kiosk launcher not found at {launcher}"
+    subprocess.run(['pkill', '-x', 'ahu_dashboard'], check=False)
+    env = os.environ.copy()
+    env['DISPLAY'] = os.getenv('DISPLAY', ':0')
+    env['ALMED_KIOSK_BOOT_DELAY'] = '0'
+    subprocess.Popen(
+        ['bash', launcher],
+        env=env,
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    logger.info(f"Relaunched kiosk via {launcher}")
+    return True, "Kiosk relaunched"
+
+
 def restart_dashboard():
-    """Restart the Flutter-Pi dashboard service"""
+    """Restart the dashboard service, or the kiosk binary if that service is absent."""
     logger.info(f"Restarting {FLUTTER_PI_SERVICE} service...")
-    
+
     try:
         result = subprocess.run(
             ['sudo', 'systemctl', 'restart', FLUTTER_PI_SERVICE],
             capture_output=True, text=True, timeout=60
         )
-        
+
         if result.returncode == 0:
             logger.info("Dashboard restarted successfully")
             return True, "Dashboard restarted"
-        else:
-            logger.error(f"Restart failed: {result.stderr}")
-            return False, result.stderr
-            
+        logger.error(f"systemctl restart failed: {result.stderr}")
+        return _relaunch_kiosk()
+
     except subprocess.TimeoutExpired:
         logger.error("Restart timed out")
         return False, "Restart timed out"
     except Exception as e:
         logger.error(f"Restart error: {e}")
-        return False, str(e)
+        return _relaunch_kiosk()
 
 
 def perform_update():
@@ -206,14 +275,18 @@ def perform_update():
             publish_status('up_to_date', 'Already up to date', progress=100)
             return True
         
-        publish_status('pulled', 'Code updated successfully', progress=50)
-        
-        # Step 3: Update version
+        publish_status('pulled', 'Code updated successfully', progress=40)
+
         old_version = current_version
         get_current_version()
-        
-        # Step 4: Restart dashboard
-        publish_status('restarting', 'Restarting dashboard...', progress=70)
+
+        publish_status('building', 'Building Linux dashboard...', progress=55)
+        success, message = run_flutter_build()
+        if not success:
+            publish_status('error', f'Flutter build failed: {message}')
+            return False
+
+        publish_status('restarting', 'Restarting dashboard...', progress=85)
         success, message = restart_dashboard()
         
         if not success:
@@ -263,15 +336,22 @@ def check_for_updates():
         )
         
         get_current_version()
-        
-        if 'Your branch is behind' in status_result.stdout:
-            # Get how many commits behind
-            log_result = subprocess.run(
-                ['git', 'log', f'HEAD..origin/{GIT_BRANCH}', '--oneline'],
-                cwd=DASHBOARD_DIR,
-                capture_output=True, text=True, timeout=10
-            )
-            commits_behind = len(log_result.stdout.strip().split('\n')) if log_result.stdout.strip() else 0
+
+        behind = subprocess.run(
+            ['git', 'rev-list', '--count', f'HEAD..origin/{GIT_BRANCH}'],
+            cwd=DASHBOARD_DIR,
+            capture_output=True, text=True, timeout=10
+        )
+        commits_behind = 0
+        if behind.returncode == 0:
+            try:
+                commits_behind = int(behind.stdout.strip() or '0')
+            except ValueError:
+                commits_behind = 0
+        elif 'Your branch is behind' in status_result.stdout:
+            commits_behind = 1
+
+        if commits_behind > 0:
             publish_status('update_available', f'Update available! {commits_behind} new commits')
         else:
             publish_status('up_to_date', f'Already on latest version: {current_version}')
@@ -317,11 +397,11 @@ def on_message(client, userdata, msg):
         
         if command in ['ota_update', 'update', 'pull']:
             logger.info("🔄 Received update command - starting git pull...")
-            perform_update()
+            threading.Thread(target=perform_update, daemon=True).start()
             
         elif command in ['check_update', 'check']:
             logger.info("🔍 Received check command...")
-            check_for_updates()
+            threading.Thread(target=check_for_updates, daemon=True).start()
             
         elif command == 'restart':
             logger.info("🔄 Received restart command...")

@@ -6,6 +6,7 @@ import '../models/ahu_telemetry.dart';
 import '../models/ahu_state.dart';
 import '../models/ahu_log.dart';
 import '../models/user_role.dart';
+import '../services/account_auth_service.dart';
 import '../services/mqtt_service.dart';
 
 /// Main application state provider with optimized updates for RPi
@@ -34,6 +35,9 @@ class AppProvider extends ChangeNotifier {
   final Map<String, DateTime> _lastTelemetryAt = {};
   final Set<String> _hospitalVisibleAhuKeys = {};
   final Set<String> _hospitalHiddenAhuKeys = {};
+  final Set<String> _assignedAhuIds = {};
+  bool _accountRestricted = false;
+  bool _accountCanOperate = true;
   bool _isConnected = false;
 
   // Cache for frequently accessed data
@@ -52,6 +56,9 @@ class AppProvider extends ChangeNotifier {
   static const String _lockStateKey = 'screen_lock_state';
   static const String _hospitalVisibleAhuKeysKey = 'hospital_visible_ahu_keys';
   static const String _hospitalHiddenAhuKeysKey = 'hospital_hidden_ahu_keys';
+  static const String _accountRestrictedKey = 'account_restricted';
+  static const String _accountAssignedKey = 'account_assigned_ahu_ids';
+  static const String _accountAccessKey = 'account_access_level';
 
   // Getters
   UserRole? get currentRole => _currentRole;
@@ -260,10 +267,44 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  /// Set user role
-  void setUserRole(UserRole role) {
+  /// Hospital and Administrator cards. Clears a previous account assignment.
+  Future<void> setUserRole(UserRole role) async {
     _currentRole = role;
+    await _clearAccountRestriction();
     notifyListeners();
+  }
+
+  /// Phone-style login. The dashboard then shows only [session.assignedAhuIds].
+  Future<void> applyAccountLogin(AccountSession session) async {
+    _currentRole = UserRole.hospital;
+    _accountRestricted = true;
+    _accountCanOperate = session.canOperate;
+    _assignedAhuIds
+      ..clear()
+      ..addAll(session.assignedAhuIds.map((id) => id.trim().toLowerCase()));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_accountRestrictedKey, true);
+      await prefs.setStringList(_accountAssignedKey, _assignedAhuIds.toList());
+      await prefs.setString(_accountAccessKey, session.accessLevel);
+    } catch (e) {
+      debugPrint('AppProvider: Error saving account login: $e');
+    }
+    notifyListeners();
+  }
+
+  Future<void> _clearAccountRestriction() async {
+    _accountRestricted = false;
+    _accountCanOperate = true;
+    _assignedAhuIds.clear();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_accountRestrictedKey);
+      await prefs.remove(_accountAssignedKey);
+      await prefs.remove(_accountAccessKey);
+    } catch (e) {
+      debugPrint('AppProvider: Error clearing account login: $e');
+    }
   }
 
   /// Initialize MQTT connection
@@ -303,6 +344,7 @@ class AppProvider extends ChangeNotifier {
 
     // Listen to telemetry updates - auto-register devices for multi-AHU discovery.
     _telemetrySubscription = _mqttService!.telemetryStream.listen((entry) {
+      if (!_allowTopic(entry.key)) return;
       final ahuId = _extractAhuId(entry.key);
       if (!_isMatchingAhu(entry.key)) {
         _ensureAhuRegistered(entry.key);
@@ -316,6 +358,7 @@ class AppProvider extends ChangeNotifier {
 
     // Listen to state updates - auto-register devices that send state (dynamic discovery)
     _stateSubscription = _mqttService!.stateStream.listen((entry) {
+      if (!_allowTopic(entry.key)) return;
       final ahuId = _extractAhuId(entry.key);
       // Auto-register AHU if we receive state data (fallback for status topic issues)
       if (!_isMatchingAhu(entry.key)) {
@@ -330,6 +373,7 @@ class AppProvider extends ChangeNotifier {
 
     // Listen to log updates - only process if device is registered
     _logSubscription = _mqttService!.logStream.listen((entry) {
+      if (!_allowTopic(entry.key)) return;
       if (!_isMatchingAhu(entry.key)) return; // Ignore unregistered devices
       final ahuId = _extractAhuId(entry.key);
 
@@ -345,6 +389,7 @@ class AppProvider extends ChangeNotifier {
 
     // Listen to status updates - register devices from either state (dynamic discovery)
     _statusSubscription = _mqttService!.statusStream.listen((entry) {
+      if (!_allowTopic(entry.key)) return;
       final ahuId = _extractAhuId(entry.key);
       final status = entry.value.trim().toLowerCase();
 
@@ -370,6 +415,7 @@ class AppProvider extends ChangeNotifier {
 
     // Listen to AWS connection status updates
     _awsStatusSubscription = _mqttService!.awsStatusStream.listen((entry) {
+      if (!_allowTopic(entry.key)) return;
       if (!_isMatchingAhu(entry.key)) return; // Only process registered devices
       final ahuId = _extractAhuId(entry.key);
       _awsStatusData[ahuId] = entry.value;
@@ -479,8 +525,39 @@ class AppProvider extends ChangeNotifier {
     return _ahuUnits.containsKey(_topicToAhuKey(topicData));
   }
 
+  /// Account logins only keep AHUs assigned on the phone/web dashboard.
+  /// Hospital and Administrator cards leave this open.
+  bool _allowTopic(String topicData) {
+    if (!_accountRestricted) return true;
+    if (_isMatchingAhu(topicData)) return true;
+    return _matchesAssignment(topicData);
+  }
+
+  bool _matchesAssignment(String topicData) {
+    final parts = topicData.split('|');
+    final ahuId = parts.isNotEmpty ? parts[0] : '';
+    final site = parts.length > 1 ? parts[1] : '';
+    final room = parts.length > 2 ? parts[2] : '';
+    final thing = parts.length > 3 ? parts[3] : '';
+    final candidates = <String>[
+      ahuId,
+      thing,
+      '${site}_${room}_$ahuId',
+    ];
+    for (final raw in candidates) {
+      final id = raw.trim().toLowerCase();
+      if (id.isNotEmpty && _assignedAhuIds.contains(id)) return true;
+    }
+    return false;
+  }
+
   /// Auto-discover and register AHU when data arrives.
   void _ensureAhuRegistered(String topicData, {String? site, String? room}) {
+    if (_accountRestricted &&
+        !_matchesAssignment(topicData) &&
+        !_isMatchingAhu(topicData)) {
+      return;
+    }
     final parts = topicData.split('|');
     final ahuId = parts.isNotEmpty ? parts[0] : topicData;
     final discoveredSite = parts.length > 1 ? parts[1] : (site ?? 'unknown');
@@ -518,7 +595,8 @@ class AppProvider extends ChangeNotifier {
   }
 
   /// Check if MQTT is ready for commands
-  bool get canSendCommands => _mqttService != null && _isConnected;
+  bool get canSendCommands =>
+      _mqttService != null && _isConnected && _accountCanOperate;
 
   /// Start AHU
   bool startAhu(String ahuId) {

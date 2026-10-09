@@ -53,6 +53,9 @@ dependencies:
   # Intl for date/time formatting
   intl: ^0.20.1
 
+  # Hospital account login (same API as the phone app)
+  http: ^1.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
