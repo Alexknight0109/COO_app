@@ -357,17 +357,31 @@ class _LightsGrid extends StatelessWidget {
             label: const Text('Add a light'),
           );
         }
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final light in lights.lights)
-              _LightTile(
-                light: light,
-                onTap: () => lights.toggle(light.id),
-                onLongPress: () => _rename(context, lights, light),
-              ),
-          ],
+        final n = lights.lights.length;
+        final cols = n <= 1
+            ? 1
+            : n == 2
+                ? 2
+                : n == 4
+                    ? 2
+                    : 3;
+        return SizedBox(
+          height: 112,
+          child: GridView.count(
+            crossAxisCount: cols,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              for (final light in lights.lights)
+                _LightTile(
+                  light: light,
+                  dense: n >= 5,
+                  onTap: () => lights.toggle(light.id),
+                  onLongPress: () => _rename(context, lights, light),
+                ),
+            ],
+          ),
         );
       },
     );
@@ -408,11 +422,13 @@ class _LightsGrid extends StatelessWidget {
 
 class _LightTile extends StatelessWidget {
   final OrLight light;
+  final bool dense;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
   const _LightTile({
     required this.light,
+    this.dense = false,
     required this.onTap,
     required this.onLongPress,
   });
@@ -420,56 +436,52 @@ class _LightTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = light.on ? const Color(0xFFF59E0B) : Colors.grey;
-    return SizedBox(
-      width: 168,
-      height: 48,
-      child: Material(
-        color: color.withOpacity(light.on ? 0.16 : 0.08),
+    return Material(
+      color: color.withOpacity(light.on ? 0.16 : 0.08),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              children: [
-                Icon(
-                  light.on
-                      ? Icons.lightbulb_rounded
-                      : Icons.lightbulb_outline_rounded,
-                  color: color,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        light.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                          color: color,
-                        ),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: dense ? 8 : 12),
+          child: Row(
+            children: [
+              Icon(
+                light.on
+                    ? Icons.lightbulb_rounded
+                    : Icons.lightbulb_outline_rounded,
+                color: color,
+                size: dense ? 16 : 22,
+              ),
+              SizedBox(width: dense ? 6 : 8),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      light.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: dense ? 11 : 13,
+                        color: color,
                       ),
-                      Text(
-                        light.on ? 'ON' : 'OFF',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: color,
-                        ),
+                    ),
+                    Text(
+                      light.on ? 'ON' : 'OFF',
+                      style: TextStyle(
+                        fontSize: dense ? 9 : 11,
+                        fontWeight: FontWeight.w600,
+                        color: color,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
