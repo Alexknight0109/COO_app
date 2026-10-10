@@ -46,15 +46,25 @@ class OrLight {
 /// Renameable OT lights, max one per safe ROCK 4B pin. Local only.
 class OrLightsProvider extends ChangeNotifier {
   static const String _prefsKey = 'or_lights_state';
+  static const String _sceneNameKey = 'or_lights_scene_name';
+  static const String _sceneIdsKey = 'or_lights_scene_ids';
   static const List<String> _defaultNames = ['OT Light', 'Peripheral', 'UV'];
 
   final Rock4GpioService _gpio = Rock4GpioService();
   final List<OrLight> _lights = [];
+  String _sceneName = 'Custom';
+  final Set<String> _sceneIds = {};
 
   List<OrLight> get lights => List.unmodifiable(_lights);
   bool get canAdd => _unusedPins.isNotEmpty;
   bool get gpioAvailable => _gpio.isAvailable;
   int get maxLights => kSafeLightPins.length;
+  bool get allOn => _lights.isNotEmpty && _lights.every((l) => l.on);
+  String get sceneName => _sceneName;
+  Set<String> get sceneIds => Set.unmodifiable(_sceneIds);
+  bool get sceneActive =>
+      _sceneIds.isNotEmpty &&
+      _lights.every((l) => _sceneIds.contains(l.id) ? l.on : !l.on);
 
   List<Rock4GpioPin> get _unusedPins {
     final used = _lights.map((l) => l.headerPin).toSet();
@@ -78,6 +88,10 @@ class OrLightsProvider extends ChangeNotifier {
             );
         }
       }
+      _sceneName = prefs.getString(_sceneNameKey) ?? 'Custom';
+      _sceneIds
+        ..clear()
+        ..addAll(prefs.getStringList(_sceneIdsKey) ?? const []);
     } catch (e) {
       debugPrint('OrLights: load failed: $e');
     }
@@ -104,6 +118,41 @@ class OrLightsProvider extends ChangeNotifier {
     light.on = !light.on;
     final pin = light.pin;
     if (pin != null) await _gpio.setPin(pin, light.on);
+    notifyListeners();
+    await _save();
+  }
+
+  Future<void> setAll(bool on) async {
+    for (final light in _lights) {
+      light.on = on;
+      final pin = light.pin;
+      if (pin != null) await _gpio.setPin(pin, on);
+    }
+    notifyListeners();
+    await _save();
+  }
+
+  Future<void> applyCustomScene() async {
+    if (_sceneIds.isEmpty) return;
+    for (final light in _lights) {
+      final on = _sceneIds.contains(light.id);
+      light.on = on;
+      final pin = light.pin;
+      if (pin != null) await _gpio.setPin(pin, on);
+    }
+    notifyListeners();
+    await _save();
+  }
+
+  Future<void> setCustomScene({
+    required String name,
+    required Iterable<String> lightIds,
+  }) async {
+    final trimmed = name.trim();
+    _sceneName = trimmed.isEmpty ? 'Custom' : trimmed;
+    _sceneIds
+      ..clear()
+      ..addAll(lightIds.where((id) => _lights.any((l) => l.id == id)));
     notifyListeners();
     await _save();
   }
@@ -147,6 +196,7 @@ class OrLightsProvider extends ChangeNotifier {
     });
     final pin = removed?.pin;
     if (pin != null) await _gpio.setPin(pin, false);
+    if (removed != null) _sceneIds.remove(removed!.id);
     notifyListeners();
     await _save();
   }
@@ -158,6 +208,8 @@ class OrLightsProvider extends ChangeNotifier {
         _prefsKey,
         jsonEncode(_lights.map((l) => l.toJson()).toList()),
       );
+      await prefs.setString(_sceneNameKey, _sceneName);
+      await prefs.setStringList(_sceneIdsKey, _sceneIds.toList());
     } catch (e) {
       debugPrint('OrLights: save failed: $e');
     }

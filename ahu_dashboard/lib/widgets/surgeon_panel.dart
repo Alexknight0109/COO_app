@@ -357,6 +357,18 @@ class _LightsGrid extends StatelessWidget {
             label: const Text('Add a light'),
           );
         }
+        return Column(
+          children: [
+            const _SceneBar(),
+            const SizedBox(height: 8),
+            _lightGrid(context, lights),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _lightGrid(BuildContext context, OrLightsProvider lights) {
         final items = lights.lights;
         final n = items.length;
         final cols = n <= 1
@@ -399,8 +411,6 @@ class _LightsGrid extends StatelessWidget {
             ],
           ),
         );
-      },
-    );
   }
 
   Future<void> _rename(
@@ -433,6 +443,203 @@ class _LightsGrid extends StatelessWidget {
     );
     controller.dispose();
     if (name != null) await lights.rename(light.id, name);
+  }
+}
+
+class _SceneBar extends StatelessWidget {
+  const _SceneBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<OrLightsProvider>(
+      builder: (context, lights, _) {
+        return SizedBox(
+          height: 44,
+          child: Row(
+            children: [
+              Expanded(
+                child: _SceneChip(
+                  icon: Icons.wb_incandescent_rounded,
+                  label: lights.allOn ? 'All off' : 'All on',
+                  active: lights.allOn,
+                  color: const Color(0xFFF59E0B),
+                  onTap: () => lights.setAll(!lights.allOn),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _SceneChip(
+                  icon: Icons.auto_awesome_rounded,
+                  label: lights.sceneIds.isEmpty
+                      ? 'Set custom'
+                      : lights.sceneName,
+                  active: lights.sceneActive,
+                  color: const Color(0xFF6366F1),
+                  onTap: () {
+                    if (lights.sceneIds.isEmpty) {
+                      _editCustom(context, lights);
+                      return;
+                    }
+                    lights.applyCustomScene();
+                  },
+                  onLongPress: () => _editCustom(context, lights),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _editCustom(BuildContext context, OrLightsProvider lights) {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => const _CustomSceneDialog(),
+    );
+  }
+}
+
+class _SceneChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final Color color;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  const _SceneChip({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.color,
+    required this.onTap,
+    this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color.withOpacity(active ? 0.2 : 0.1),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CustomSceneDialog extends StatefulWidget {
+  const _CustomSceneDialog();
+
+  @override
+  State<_CustomSceneDialog> createState() => _CustomSceneDialogState();
+}
+
+class _CustomSceneDialogState extends State<_CustomSceneDialog> {
+  late final TextEditingController _name;
+  late Set<String> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    final lights = context.read<OrLightsProvider>();
+    _name = TextEditingController(text: lights.sceneName);
+    _selected = {...lights.sceneIds};
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lights = context.watch<OrLightsProvider>();
+    return AlertDialog(
+      title: const Text('Custom On'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Pick which lights this button turns on. Everything else goes off. Long-press Custom to edit later.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _name,
+              decoration: const InputDecoration(
+                labelText: 'Button name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final light in lights.lights)
+              CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(light.name),
+                value: _selected.contains(light.id),
+                onChanged: (on) {
+                  setState(() {
+                    if (on == true) {
+                      _selected.add(light.id);
+                    } else {
+                      _selected.remove(light.id);
+                    }
+                  });
+                },
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _selected.isEmpty
+              ? null
+              : () async {
+                  await lights.setCustomScene(
+                    name: _name.text,
+                    lightIds: _selected,
+                  );
+                  await lights.applyCustomScene();
+                  if (context.mounted) Navigator.pop(context);
+                },
+          child: const Text('Save & On'),
+        ),
+      ],
+    );
   }
 }
 
