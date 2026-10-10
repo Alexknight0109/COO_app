@@ -30,7 +30,8 @@ const kSafeLightPins = <Rock4GpioPin>[
 ];
 
 /// Writes light state with libgpiod `gpioset`. UI still works if the binary
-/// is missing. Lines stay low (off) unless a light is on.
+/// is missing. Opto relays on this board are active-LOW: GPIO low = light on,
+/// GPIO high = light off.
 class Rock4GpioService {
   bool _available = false;
   bool get isAvailable => _available;
@@ -63,7 +64,7 @@ class Rock4GpioService {
     try {
       final result = await Process.run(
         'gpioset',
-        [pin.chip, '${pin.line}=${on ? 1 : 0}'],
+        [pin.chip, '${pin.line}=${on ? 0 : 1}'],
       );
       if (result.exitCode != 0) {
         debugPrint(
