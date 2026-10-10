@@ -357,29 +357,45 @@ class _LightsGrid extends StatelessWidget {
             label: const Text('Add a light'),
           );
         }
-        final n = lights.lights.length;
+        final items = lights.lights;
+        final n = items.length;
         final cols = n <= 1
             ? 1
-            : n == 2
+            : n <= 2
                 ? 2
                 : n == 4
                     ? 2
                     : 3;
+        final rows = (n / cols).ceil();
+
+        Widget cell(int i) {
+          if (i >= n) return const SizedBox.shrink();
+          final light = items[i];
+          return _LightTile(
+            light: light,
+            dense: n >= 4,
+            onTap: () => lights.toggle(light.id),
+            onLongPress: () => _rename(context, lights, light),
+          );
+        }
+
         return SizedBox(
-          height: 112,
-          child: GridView.count(
-            crossAxisCount: cols,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            physics: const NeverScrollableScrollPhysics(),
+          height: rows == 1 ? 52 : 108,
+          child: Column(
             children: [
-              for (final light in lights.lights)
-                _LightTile(
-                  light: light,
-                  dense: n >= 5,
-                  onTap: () => lights.toggle(light.id),
-                  onLongPress: () => _rename(context, lights, light),
+              for (var r = 0; r < rows; r++) ...[
+                if (r > 0) const SizedBox(height: 8),
+                Expanded(
+                  child: Row(
+                    children: [
+                      for (var c = 0; c < cols; c++) ...[
+                        if (c > 0) const SizedBox(width: 8),
+                        Expanded(child: cell(r * cols + c)),
+                      ],
+                    ],
+                  ),
                 ),
+              ],
             ],
           ),
         );
