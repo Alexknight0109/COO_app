@@ -3,9 +3,11 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/app_provider.dart';
 import '../providers/or_lights_provider.dart';
 import '../providers/or_session_provider.dart';
 import '../theme/app_theme.dart';
+import 'or_phone_dialer.dart';
 
 class SurgeonPanelCard extends StatelessWidget {
   final bool isSmallScreen;
@@ -96,6 +98,21 @@ class _Header extends StatelessWidget {
                 ),
             ],
           ),
+        ),
+        Selector<AppProvider, bool>(
+          selector: (_, p) => p.isV3Dashboard,
+          builder: (context, isV3, _) {
+            if (!isV3) return const SizedBox.shrink();
+            return IconButton(
+              tooltip: 'Hospital phone',
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => const OrPhoneDialerDialog(),
+              ),
+              icon: const Icon(Icons.phone_in_talk_rounded,
+                  color: Color(0xFF22C55E)),
+            );
+          },
         ),
         IconButton(
           tooltip: 'Edit lights',

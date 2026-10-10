@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:provider/provider.dart';
 import 'providers/app_provider.dart';
 import 'providers/or_lights_provider.dart';
+import 'providers/or_phone_provider.dart';
 import 'providers/or_session_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/login_screen.dart';
@@ -52,13 +53,16 @@ void main() async {
 
   final orSession = OrSessionProvider();
   final orLights = OrLightsProvider();
+  final orPhone = OrPhoneProvider();
   await orSession.load();
   await orLights.load();
+  await orPhone.load();
 
   runApp(AhuDashboardApp(
     appProvider: appProvider,
     orSession: orSession,
     orLights: orLights,
+    orPhone: orPhone,
   ));
 }
 
@@ -93,12 +97,14 @@ class AhuDashboardApp extends StatefulWidget {
   final AppProvider appProvider;
   final OrSessionProvider orSession;
   final OrLightsProvider orLights;
+  final OrPhoneProvider orPhone;
 
   const AhuDashboardApp({
     super.key,
     required this.appProvider,
     required this.orSession,
     required this.orLights,
+    required this.orPhone,
   });
 
   @override
@@ -144,6 +150,7 @@ class _AhuDashboardAppState extends State<AhuDashboardApp>
         ChangeNotifierProvider.value(value: widget.appProvider),
         ChangeNotifierProvider.value(value: widget.orSession),
         ChangeNotifierProvider.value(value: widget.orLights),
+        ChangeNotifierProvider.value(value: widget.orPhone),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: Consumer<ThemeProvider>(

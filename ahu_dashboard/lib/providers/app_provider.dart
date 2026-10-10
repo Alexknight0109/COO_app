@@ -64,15 +64,18 @@ class AppProvider extends ChangeNotifier {
   static const String _hospitalVisibleAhuKeysKey = 'hospital_visible_ahu_keys';
   static const String _hospitalHiddenAhuKeysKey = 'hospital_hidden_ahu_keys';
   static const String _v2DashboardKey = 'dashboard_v2_enabled';
+  static const String _dashboardModeKey = 'dashboard_mode';
   static const Duration _localFreshWindow = Duration(seconds: 15);
-  bool _isV2Dashboard = false;
+  int _dashboardMode = 1;
 
   // Getters
   UserRole? get currentRole => _currentRole;
   bool get isConnected => _isConnected;
   MqttService? get mqttService => _mqttService;
   bool get isScreenLocked => _isScreenLocked;
-  bool get isV2Dashboard => _isV2Dashboard;
+  int get dashboardMode => _dashboardMode;
+  bool get isV2Dashboard => _dashboardMode >= 2;
+  bool get isV3Dashboard => _dashboardMode >= 3;
 
   /// Initialize and load saved passcode and lock state
   Future<void> loadScreenLockPasscode() async {
@@ -91,7 +94,12 @@ class AppProvider extends ChangeNotifier {
       _hospitalHiddenAhuKeys
         ..clear()
         ..addAll(savedHiddenKeys);
-      _isV2Dashboard = prefs.getBool(_v2DashboardKey) ?? false;
+      final savedMode = prefs.getInt(_dashboardModeKey);
+      if (savedMode != null && savedMode >= 1 && savedMode <= 3) {
+        _dashboardMode = savedMode;
+      } else {
+        _dashboardMode = (prefs.getBool(_v2DashboardKey) ?? false) ? 2 : 1;
+      }
       debugPrint('AppProvider: Loaded screen lock - locked: $_isScreenLocked');
       notifyListeners();
     } catch (e) {
@@ -179,14 +187,19 @@ class AppProvider extends ChangeNotifier {
   /// Get current passcode (for admin settings display)
   String get currentPasscode => _screenLockPasscode;
 
-  Future<void> setV2Dashboard(bool enabled) async {
-    _isV2Dashboard = enabled;
+  Future<void> setV2Dashboard(bool enabled) =>
+      setDashboardMode(enabled ? 2 : 1);
+
+  Future<void> setDashboardMode(int mode) async {
+    final next = mode < 1 ? 1 : (mode > 3 ? 3 : mode);
+    _dashboardMode = next;
     notifyListeners();
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_v2DashboardKey, enabled);
+      await prefs.setInt(_dashboardModeKey, next);
+      await prefs.setBool(_v2DashboardKey, next >= 2);
     } catch (e) {
-      debugPrint('AppProvider: Error saving V2 dashboard: $e');
+      debugPrint('AppProvider: Error saving dashboard mode: $e');
     }
   }
 

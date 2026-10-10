@@ -852,7 +852,7 @@ class _DashboardModeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isV2 = provider.isV2Dashboard;
+    final mode = provider.dashboardMode;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -874,21 +874,26 @@ class _DashboardModeCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'V2 adds a surgeon panel (operation timer and OT lights) next to the AHU cards. This Radxa only.',
+            'V2: surgeon timer + OT lights. V3: hospital phone on this Radxa. Local only.',
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 14),
-          SegmentedButton<bool>(
+          SegmentedButton<int>(
             segments: const [
-              ButtonSegment(value: false, label: Text('V1'), icon: Icon(Icons.air_rounded)),
+              ButtonSegment(value: 1, label: Text('V1'), icon: Icon(Icons.air_rounded)),
               ButtonSegment(
-                value: true,
+                value: 2,
                 label: Text('V2'),
                 icon: Icon(Icons.health_and_safety_rounded),
               ),
+              ButtonSegment(
+                value: 3,
+                label: Text('V3'),
+                icon: Icon(Icons.phone_in_talk_rounded),
+              ),
             ],
-            selected: {isV2},
-            onSelectionChanged: (set) => provider.setV2Dashboard(set.first),
+            selected: {mode},
+            onSelectionChanged: (set) => provider.setDashboardMode(set.first),
           ),
         ],
       ),
