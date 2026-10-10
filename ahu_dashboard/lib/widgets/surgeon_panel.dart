@@ -357,13 +357,9 @@ class _LightsGrid extends StatelessWidget {
             label: const Text('Add a light'),
           );
         }
-        return GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          childAspectRatio: isSmallScreen ? 2.1 : 2.3,
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
             for (final light in lights.lights)
               _LightTile(
@@ -424,52 +420,56 @@ class _LightTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = light.on ? const Color(0xFFF59E0B) : Colors.grey;
-    return Material(
-      color: color.withOpacity(light.on ? 0.16 : 0.08),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Icon(
-                light.on
-                    ? Icons.lightbulb_rounded
-                    : Icons.lightbulb_outline_rounded,
-                color: color,
-                size: 22,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      light.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                        color: color,
-                      ),
-                    ),
-                    Text(
-                      light.on ? 'ON' : 'OFF',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: color,
-                      ),
-                    ),
-                  ],
+    return SizedBox(
+      width: 168,
+      height: 48,
+      child: Material(
+        color: color.withOpacity(light.on ? 0.16 : 0.08),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              children: [
+                Icon(
+                  light.on
+                      ? Icons.lightbulb_rounded
+                      : Icons.lightbulb_outline_rounded,
+                  color: color,
+                  size: 18,
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        light.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          color: color,
+                        ),
+                      ),
+                      Text(
+                        light.on ? 'ON' : 'OFF',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
