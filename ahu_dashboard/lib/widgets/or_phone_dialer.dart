@@ -288,22 +288,22 @@ class _SipSettingsDialogState extends State<_SipSettingsDialog> {
   Widget build(BuildContext context) {
     final phone = context.watch<OrPhoneProvider>();
     return AlertDialog(
-      title: const Text('FXO gateway'),
+      title: const Text('USB FXO'),
       content: SizedBox(
         width: 340,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Grandstream HT813 on this LAN. Analog PBX wall jack goes into the HT813 FXO port.',
+              'Hospital RJ11 into the USB FXO stick. Leave Ethernet for LAN. SIP host is usually 127.0.0.1 if Asterisk is on this Radxa.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _host,
               decoration: const InputDecoration(
-                labelText: 'HT813 IP',
-                hintText: '192.168.0.50',
+                labelText: 'SIP host',
+                hintText: '127.0.0.1',
                 border: OutlineInputBorder(),
               ),
             ),

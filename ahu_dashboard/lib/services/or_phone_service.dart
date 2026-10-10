@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 /// Talks to a local SIP client (pjsua or linphonecsh) so the Radxa can
-/// place a call through a Grandstream HT813 FXO gateway.
-/// UI still works if neither binary is installed.
+/// place a call through a USB FXO module (Asterisk on localhost, or a
+/// gateway IP). Ethernet is not used. UI still works if no SIP binary.
 class OrPhoneService {
   Process? _call;
   String? _backend;

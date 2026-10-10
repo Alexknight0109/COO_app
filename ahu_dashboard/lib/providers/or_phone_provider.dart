@@ -126,7 +126,7 @@ class OrPhoneProvider extends ChangeNotifier {
       return;
     }
     if (_sipHost.isEmpty) {
-      _status = 'Set the HT813 IP in phone settings first';
+      _status = 'Set SIP host in phone settings first (usually 127.0.0.1)';
       _callState = OrCallState.failed;
       notifyListeners();
       return;
