@@ -166,28 +166,30 @@ class _AdminScreenState extends State<AdminScreen> {
                     final ahus = provider.ahuUnits;
 
                     if (ahus.isEmpty) {
-                      return Center(
+                      return SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // ALMED Logo
-                            Container(
-                              constraints: const BoxConstraints(maxWidth: 200),
-                              child: Opacity(
-                                opacity: 0.3,
-                                child: Image.asset(
-                                  isDark 
-                                      ? 'assets/images/logo_light.png'
-                                      : 'assets/images/logo_dark.png',
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Icon(
-                                      Icons.air_rounded,
-                                      size: 80,
-                                      color: Theme.of(context).colorScheme.primary.withOpacity( 0.3),
-                                    );
-                                  },
-                                ),
+                            _DashboardModeCard(provider: provider),
+                            const SizedBox(height: 48),
+                            Opacity(
+                              opacity: 0.3,
+                              child: Image.asset(
+                                isDark
+                                    ? 'assets/images/logo_light.png'
+                                    : 'assets/images/logo_dark.png',
+                                width: 160,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Icon(
+                                    Icons.air_rounded,
+                                    size: 80,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withOpacity(0.3),
+                                  );
+                                },
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -208,6 +210,8 @@ class _AdminScreenState extends State<AdminScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          _DashboardModeCard(provider: provider),
+                          const SizedBox(height: 16),
                           // AHU selection
                           Container(
                             decoration: BoxDecoration(
@@ -837,6 +841,58 @@ void _exitToDesktop() async {
     exit(0);
   } else {
     SystemNavigator.pop();
+  }
+}
+
+class _DashboardModeCard extends StatelessWidget {
+  final AppProvider provider;
+
+  const _DashboardModeCard({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isV2 = provider.isV2Dashboard;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.dashboard_customize_rounded,
+                  color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text('Dashboard mode', style: theme.textTheme.titleLarge),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'V2 adds a surgeon panel (operation timer and OT lights) next to the AHU cards. This Radxa only.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 14),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: false, label: Text('V1'), icon: Icon(Icons.air_rounded)),
+              ButtonSegment(
+                value: true,
+                label: Text('V2'),
+                icon: Icon(Icons.health_and_safety_rounded),
+              ),
+            ],
+            selected: {isV2},
+            onSelectionChanged: (set) => provider.setV2Dashboard(set.first),
+          ),
+        ],
+      ),
+    );
   }
 }
 

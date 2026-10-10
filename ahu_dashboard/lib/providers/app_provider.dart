@@ -63,13 +63,16 @@ class AppProvider extends ChangeNotifier {
   static const String _lockStateKey = 'screen_lock_state';
   static const String _hospitalVisibleAhuKeysKey = 'hospital_visible_ahu_keys';
   static const String _hospitalHiddenAhuKeysKey = 'hospital_hidden_ahu_keys';
+  static const String _v2DashboardKey = 'dashboard_v2_enabled';
   static const Duration _localFreshWindow = Duration(seconds: 15);
+  bool _isV2Dashboard = false;
 
   // Getters
   UserRole? get currentRole => _currentRole;
   bool get isConnected => _isConnected;
   MqttService? get mqttService => _mqttService;
   bool get isScreenLocked => _isScreenLocked;
+  bool get isV2Dashboard => _isV2Dashboard;
 
   /// Initialize and load saved passcode and lock state
   Future<void> loadScreenLockPasscode() async {
@@ -88,6 +91,7 @@ class AppProvider extends ChangeNotifier {
       _hospitalHiddenAhuKeys
         ..clear()
         ..addAll(savedHiddenKeys);
+      _isV2Dashboard = prefs.getBool(_v2DashboardKey) ?? false;
       debugPrint('AppProvider: Loaded screen lock - locked: $_isScreenLocked');
       notifyListeners();
     } catch (e) {
@@ -174,6 +178,17 @@ class AppProvider extends ChangeNotifier {
 
   /// Get current passcode (for admin settings display)
   String get currentPasscode => _screenLockPasscode;
+
+  Future<void> setV2Dashboard(bool enabled) async {
+    _isV2Dashboard = enabled;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_v2DashboardKey, enabled);
+    } catch (e) {
+      debugPrint('AppProvider: Error saving V2 dashboard: $e');
+    }
+  }
 
   /// Get AWS cloud connection status for specific AHU
   bool isAwsConnected(String ahuId) => _awsStatusData[ahuId] ?? false;

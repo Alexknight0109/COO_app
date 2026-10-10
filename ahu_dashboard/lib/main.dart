@@ -5,6 +5,8 @@ import 'package:flutter/rendering.dart';
 import 'dart:io';
 import 'package:provider/provider.dart';
 import 'providers/app_provider.dart';
+import 'providers/or_lights_provider.dart';
+import 'providers/or_session_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/login_screen.dart';
 import 'services/app_version.dart';
@@ -48,7 +50,16 @@ void main() async {
   await appProvider.loadSavedAccount();
   await AppVersion.load();
 
-  runApp(AhuDashboardApp(appProvider: appProvider));
+  final orSession = OrSessionProvider();
+  final orLights = OrLightsProvider();
+  await orSession.load();
+  await orLights.load();
+
+  runApp(AhuDashboardApp(
+    appProvider: appProvider,
+    orSession: orSession,
+    orLights: orLights,
+  ));
 }
 
 /// Custom scroll behavior that:
@@ -80,8 +91,15 @@ class TouchFriendlyScrollBehavior extends MaterialScrollBehavior {
 
 class AhuDashboardApp extends StatefulWidget {
   final AppProvider appProvider;
+  final OrSessionProvider orSession;
+  final OrLightsProvider orLights;
 
-  const AhuDashboardApp({super.key, required this.appProvider});
+  const AhuDashboardApp({
+    super.key,
+    required this.appProvider,
+    required this.orSession,
+    required this.orLights,
+  });
 
   @override
   State<AhuDashboardApp> createState() => _AhuDashboardAppState();
@@ -124,6 +142,8 @@ class _AhuDashboardAppState extends State<AhuDashboardApp>
       providers: [
         // Use pre-loaded provider with lock state already initialized
         ChangeNotifierProvider.value(value: widget.appProvider),
+        ChangeNotifierProvider.value(value: widget.orSession),
+        ChangeNotifierProvider.value(value: widget.orLights),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: Consumer<ThemeProvider>(

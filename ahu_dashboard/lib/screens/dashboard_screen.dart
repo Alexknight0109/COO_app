@@ -10,6 +10,7 @@ import '../providers/app_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/aws_source_pill.dart';
+import '../widgets/surgeon_panel.dart';
 import 'ahu_control_screen.dart';
 import 'admin_screen.dart';
 import 'login_screen.dart';
@@ -302,10 +303,13 @@ class _AhuCardsList extends StatelessWidget {
     final screenHeight = MediaQuery.of(context).size.height;
     final isSmallScreen = screenHeight < 650;
     
-    return Selector<AppProvider, List<AhuUnit>>(
-      selector: (_, provider) => provider.visibleAhuUnits,
-      builder: (context, ahus, _) {
-        if (ahus.isEmpty) {
+    return Selector<AppProvider, ({List<AhuUnit> ahus, bool isV2})>(
+      selector: (_, provider) => (
+        ahus: provider.visibleAhuUnits,
+        isV2: provider.isV2Dashboard,
+      ),
+      builder: (context, data, _) {
+        if (data.ahus.isEmpty && !data.isV2) {
           return _EmptyState(isDark: isDark);
         }
 
@@ -322,10 +326,15 @@ class _AhuCardsList extends StatelessWidget {
               spacing: isSmallScreen ? 10 : 16,
               runSpacing: isSmallScreen ? 10 : 16,
               alignment: WrapAlignment.center,
-              // RPi Performance: Wrap each card in RepaintBoundary
-              children: ahus.map((ahu) => RepaintBoundary(
-                child: _ModernAhuCard(ahu: ahu, isSmallScreen: isSmallScreen),
-              )).toList(),
+              children: [
+                ...data.ahus.map((ahu) => RepaintBoundary(
+                  child: _ModernAhuCard(ahu: ahu, isSmallScreen: isSmallScreen),
+                )),
+                if (data.isV2)
+                  RepaintBoundary(
+                    child: SurgeonPanelCard(isSmallScreen: isSmallScreen),
+                  ),
+              ],
             ),
           ),
         );
