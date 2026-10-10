@@ -10,13 +10,36 @@ import '../theme/app_theme.dart';
 class SurgeonPanelCard extends StatelessWidget {
   final bool isSmallScreen;
 
-  const SurgeonPanelCard({super.key, this.isSmallScreen = false});
+  /// When true, sits inside an AHU card (no outer chrome).
+  final bool embedded;
+
+  const SurgeonPanelCard({
+    super.key,
+    this.isSmallScreen = false,
+    this.embedded = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Header(isSmallScreen: isSmallScreen, compact: embedded),
+        SizedBox(height: isSmallScreen ? 8 : 10),
+        _Clock(compact: embedded),
+        SizedBox(height: isSmallScreen ? 8 : 10),
+        const _TimerActions(),
+        SizedBox(height: isSmallScreen ? 8 : 10),
+        const _StampList(),
+        SizedBox(height: isSmallScreen ? 8 : 10),
+        _LightsGrid(isSmallScreen: isSmallScreen),
+      ],
+    );
+
+    if (embedded) return body;
+
     final theme = Theme.of(context);
     final cardWidth = isSmallScreen ? 380.0 : 420.0;
-
     return SizedBox(
       width: cardWidth,
       child: Container(
@@ -26,20 +49,7 @@ class SurgeonPanelCard extends StatelessWidget {
           border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
         ),
         padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Header(isSmallScreen: isSmallScreen),
-            SizedBox(height: isSmallScreen ? 12 : 16),
-            const _Clock(),
-            SizedBox(height: isSmallScreen ? 10 : 14),
-            const _TimerActions(),
-            SizedBox(height: isSmallScreen ? 12 : 16),
-            const _StampList(),
-            SizedBox(height: isSmallScreen ? 12 : 16),
-            _LightsGrid(isSmallScreen: isSmallScreen),
-          ],
-        ),
+        child: body,
       ),
     );
   }
@@ -47,8 +57,9 @@ class SurgeonPanelCard extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   final bool isSmallScreen;
+  final bool compact;
 
-  const _Header({required this.isSmallScreen});
+  const _Header({required this.isSmallScreen, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -56,8 +67,8 @@ class _Header extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: isSmallScreen ? 40 : 44,
-          height: isSmallScreen ? 40 : 44,
+          width: compact ? 32 : (isSmallScreen ? 40 : 44),
+          height: compact ? 32 : (isSmallScreen ? 40 : 44),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [Color(0xFF3B82F6), Color(0xFF6366F1)],
@@ -75,13 +86,14 @@ class _Header extends StatelessWidget {
               Text(
                 'Surgeon panel',
                 style: theme.textTheme.displayMedium?.copyWith(
-                  fontSize: isSmallScreen ? 20 : 22,
+                  fontSize: compact ? 16 : (isSmallScreen ? 20 : 22),
                 ),
               ),
-              Text(
-                'Local to this display',
-                style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
-              ),
+              if (!compact)
+                Text(
+                  'Local to this display',
+                  style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12),
+                ),
             ],
           ),
         ),
@@ -103,7 +115,9 @@ class _Header extends StatelessWidget {
 }
 
 class _Clock extends StatelessWidget {
-  const _Clock();
+  final bool compact;
+
+  const _Clock({this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -122,7 +136,7 @@ class _Clock extends StatelessWidget {
                 : theme.colorScheme.primary;
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 14),
+          padding: EdgeInsets.symmetric(vertical: compact ? 8 : 14),
           decoration: BoxDecoration(
             color: color.withOpacity(0.08),
             borderRadius: BorderRadius.circular(16),
@@ -133,7 +147,7 @@ class _Clock extends StatelessWidget {
               Text(
                 data.text,
                 style: TextStyle(
-                  fontSize: 42,
+                  fontSize: compact ? 28 : 42,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 2,
                   color: color,
