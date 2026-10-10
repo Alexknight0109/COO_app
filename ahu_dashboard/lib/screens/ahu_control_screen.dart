@@ -10,6 +10,7 @@ import '../models/ahu_telemetry.dart';
 import '../models/ahu_state.dart';
 import '../models/ahu_log.dart';
 import '../widgets/aws_source_pill.dart';
+import '../widgets/surgeon_panel.dart';
 import '../widgets/motor_timing_dialog.dart';
 import '../widgets/wifi_control_widget.dart';
 import '../widgets/screen_lock_dialog.dart';
@@ -65,6 +66,44 @@ class _AhuControlScreenState extends State<AhuControlScreen> {
                       const SizedBox(height: 16),
                       // Compact AQI & HEPA boxes (tap to expand) - combo sensors only
                       _ComboSensorBoxes(ahuId: widget.ahuId),
+                      Selector<AppProvider, bool>(
+                        selector: (_, p) => p.isV2Dashboard,
+                        builder: (context, isV2, _) {
+                          if (!isV2) return const SizedBox.shrink();
+                          final isDark =
+                              Theme.of(context).brightness == Brightness.dark;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: isDark
+                                      ? [
+                                          Colors.white.withOpacity(0.05),
+                                          Colors.white.withOpacity(0.02),
+                                        ]
+                                      : [Colors.white, Colors.grey.shade50],
+                                ),
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
+                                  color: Theme.of(context)
+                                      .dividerColor
+                                      .withOpacity(0.2),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: const SurgeonPanelCard(
+                                embedded: true,
+                                isSmallScreen: true,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                       // Component Status
                       _ComponentStatus(ahuId: widget.ahuId),
                       const SizedBox(height: 16),

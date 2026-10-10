@@ -10,7 +10,6 @@ import '../providers/app_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/aws_source_pill.dart';
-import '../widgets/surgeon_panel.dart';
 import 'ahu_control_screen.dart';
 import 'admin_screen.dart';
 import 'login_screen.dart';
@@ -303,13 +302,10 @@ class _AhuCardsList extends StatelessWidget {
     final screenHeight = MediaQuery.of(context).size.height;
     final isSmallScreen = screenHeight < 650;
     
-    return Selector<AppProvider, ({List<AhuUnit> ahus, bool isV2})>(
-      selector: (_, provider) => (
-        ahus: provider.visibleAhuUnits,
-        isV2: provider.isV2Dashboard,
-      ),
-      builder: (context, data, _) {
-        if (data.ahus.isEmpty) {
+    return Selector<AppProvider, List<AhuUnit>>(
+      selector: (_, provider) => provider.visibleAhuUnits,
+      builder: (context, ahus, _) {
+        if (ahus.isEmpty) {
           return _EmptyState(isDark: isDark);
         }
 
@@ -326,12 +322,11 @@ class _AhuCardsList extends StatelessWidget {
               spacing: isSmallScreen ? 10 : 16,
               runSpacing: isSmallScreen ? 10 : 16,
               alignment: WrapAlignment.center,
-              children: data.ahus
+              children: ahus
                   .map((ahu) => RepaintBoundary(
                         child: _ModernAhuCard(
                           ahu: ahu,
                           isSmallScreen: isSmallScreen,
-                          showSurgeonPanel: data.isV2,
                         ),
                       ))
                   .toList(),
@@ -420,12 +415,10 @@ class _AhuCardData {
 class _ModernAhuCard extends StatelessWidget {
   final AhuUnit ahu;
   final bool isSmallScreen;
-  final bool showSurgeonPanel;
 
   const _ModernAhuCard({
     required this.ahu,
     this.isSmallScreen = false,
-    this.showSurgeonPanel = false,
   });
 
   @override
@@ -481,16 +474,6 @@ class _ModernAhuCard extends StatelessWidget {
                     SizedBox(height: isSmallScreen ? 14 : 18),
                     // Sensors
                     _SensorRow(data: data, isSmallScreen: isSmallScreen),
-                    if (showSurgeonPanel) ...[
-                      SizedBox(height: isSmallScreen ? 12 : 16),
-                      GestureDetector(
-                        onTap: () {},
-                        child: SurgeonPanelCard(
-                          isSmallScreen: isSmallScreen,
-                          embedded: true,
-                        ),
-                      ),
-                    ],
                     SizedBox(height: isSmallScreen ? 12 : 16),
                     // Status chips
                     _StatusChips(data: data, isRunning: isRunning, isSmallScreen: isSmallScreen),
