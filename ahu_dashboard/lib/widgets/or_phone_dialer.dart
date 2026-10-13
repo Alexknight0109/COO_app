@@ -19,8 +19,8 @@ class OrPhoneDialerDialog extends StatelessWidget {
           const SizedBox(width: 8),
           const Expanded(child: Text('Hospital line')),
           IconButton(
-            tooltip: 'SIP / gateway',
-            onPressed: () => _editSip(context),
+            tooltip: 'Analog line',
+            onPressed: () => _editLine(context),
             icon: const Icon(Icons.settings_rounded, size: 20),
           ),
         ],
@@ -124,10 +124,10 @@ class OrPhoneDialerDialog extends StatelessWidget {
     );
   }
 
-  Future<void> _editSip(BuildContext context) {
+  Future<void> _editLine(BuildContext context) {
     return showDialog<void>(
       context: context,
-      builder: (_) => const _SipSettingsDialog(),
+      builder: (_) => const _LineSettingsDialog(),
     );
   }
 }
@@ -252,35 +252,31 @@ class _Key extends StatelessWidget {
   }
 }
 
-class _SipSettingsDialog extends StatefulWidget {
-  const _SipSettingsDialog();
+class _LineSettingsDialog extends StatefulWidget {
+  const _LineSettingsDialog();
 
   @override
-  State<_SipSettingsDialog> createState() => _SipSettingsDialogState();
+  State<_LineSettingsDialog> createState() => _LineSettingsDialogState();
 }
 
-class _SipSettingsDialogState extends State<_SipSettingsDialog> {
-  late final TextEditingController _host;
-  late final TextEditingController _user;
-  late final TextEditingController _pass;
+class _LineSettingsDialogState extends State<_LineSettingsDialog> {
   late final TextEditingController _prefix;
+  late final TextEditingController _alsa;
+  late bool _hookHigh;
 
   @override
   void initState() {
     super.initState();
     final phone = context.read<OrPhoneProvider>();
-    _host = TextEditingController(text: phone.sipHost);
-    _user = TextEditingController(text: phone.sipUser);
-    _pass = TextEditingController();
     _prefix = TextEditingController(text: phone.sipPrefix);
+    _alsa = TextEditingController(text: phone.alsaDevice);
+    _hookHigh = phone.hookActiveHigh;
   }
 
   @override
   void dispose() {
-    _host.dispose();
-    _user.dispose();
-    _pass.dispose();
     _prefix.dispose();
+    _alsa.dispose();
     super.dispose();
   }
 
@@ -288,40 +284,24 @@ class _SipSettingsDialogState extends State<_SipSettingsDialog> {
   Widget build(BuildContext context) {
     final phone = context.watch<OrPhoneProvider>();
     return AlertDialog(
-      title: const Text('USB FXO'),
+      title: const Text('Analog line'),
       content: SizedBox(
         width: 340,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Hospital RJ11 into the USB FXO stick. Leave Ethernet for LAN. SIP host is usually 127.0.0.1 if Asterisk is on this Radxa.',
+              'Ag2130-S + CM108. Ethernet stays on the LAN.\n'
+              'Hook ${phone.hookPinLabel} (off-hook). '
+              'Ring ${phone.ringPinLabel}.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: _host,
+              controller: _alsa,
               decoration: const InputDecoration(
-                labelText: 'SIP host',
-                hintText: '127.0.0.1',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _user,
-              decoration: const InputDecoration(
-                labelText: 'SIP user',
-                hintText: '100',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _pass,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'SIP password',
+                labelText: 'ALSA device',
+                hintText: 'plughw:1,0 (CM108, auto if empty)',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -333,6 +313,13 @@ class _SipSettingsDialogState extends State<_SipSettingsDialog> {
                 border: OutlineInputBorder(),
               ),
             ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Hook high = off-hook'),
+              subtitle: const Text('Off if Ag2130 HOOK is active-low'),
+              value: _hookHigh,
+              onChanged: (v) => setState(() => _hookHigh = v),
+            ),
           ],
         ),
       ),
@@ -343,11 +330,10 @@ class _SipSettingsDialogState extends State<_SipSettingsDialog> {
         ),
         FilledButton(
           onPressed: () async {
-            await phone.setSip(
-              host: _host.text,
-              user: _user.text,
-              password: _pass.text.isEmpty ? null : _pass.text,
+            await phone.setLine(
               prefix: _prefix.text,
+              alsaDevice: _alsa.text,
+              hookActiveHigh: _hookHigh,
             );
             if (context.mounted) Navigator.pop(context);
           },

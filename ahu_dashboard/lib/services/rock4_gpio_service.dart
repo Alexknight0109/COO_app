@@ -29,6 +29,21 @@ const kSafeLightPins = <Rock4GpioPin>[
   Rock4GpioPin(headerPin: 22, gpioName: 'GPIO4_D5', chip: 'gpiochip4', line: 29),
 ];
 
+/// Ag2130-S analog phone. Not OT-light pins.
+/// Hook (output): header 37. Ring detect (input): header 32.
+const kPhoneHookPin = Rock4GpioPin(
+  headerPin: 37,
+  gpioName: 'GPIO4_D6',
+  chip: 'gpiochip4',
+  line: 30,
+);
+const kPhoneRingPin = Rock4GpioPin(
+  headerPin: 32,
+  gpioName: 'GPIO3_C0',
+  chip: 'gpiochip3',
+  line: 16,
+);
+
 /// Writes light state with libgpiod `gpioset`. UI still works if the binary
 /// is missing. Opto relays on this board are active-LOW: GPIO low = light on,
 /// GPIO high = light off.

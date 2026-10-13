@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/or_phone_service.dart';
+import '../services/rock4_gpio_service.dart';
 
-enum OrCallState { idle, dialing, inCall, failed }
+enum OrCallState { idle, dialing, inCall, ringing, failed }
 
 class OrSpeedDial {
   String name;
@@ -12,51 +15,50 @@ class OrSpeedDial {
   OrSpeedDial({required this.name, required this.number});
 }
 
-/// Local hospital phone: 3 presets + SIP to the FXO gateway. No cloud.
+/// Local analog hospital phone: Ag2130 GPIO + CM108 ALSA. No cloud, no Ethernet.
 class OrPhoneProvider extends ChangeNotifier {
-  static const _hostKey = 'or_phone_sip_host';
-  static const _userKey = 'or_phone_sip_user';
-  static const _passKey = 'or_phone_sip_pass';
   static const _prefixKey = 'or_phone_sip_prefix';
+  static const _alsaKey = 'or_phone_alsa_dev';
+  static const _hookHighKey = 'or_phone_hook_high';
   static const _presetNamePrefix = 'or_phone_preset_name_';
   static const _presetNumPrefix = 'or_phone_preset_num_';
 
   static const _defaultNames = ['OT desk', 'ICU', 'Engineer'];
 
-  final OrPhoneService _sip = OrPhoneService();
+  final OrPhoneService _line = OrPhoneService();
   final List<OrSpeedDial> _presets = [
     OrSpeedDial(name: _defaultNames[0], number: ''),
     OrSpeedDial(name: _defaultNames[1], number: ''),
     OrSpeedDial(name: _defaultNames[2], number: ''),
   ];
 
-  String _sipHost = '';
-  String _sipUser = '';
-  String _sipPass = '';
   String _sipPrefix = '';
+  String _alsaDevice = '';
+  bool _hookActiveHigh = true;
   String _dialBuffer = '';
   OrCallState _callState = OrCallState.idle;
   String _status = '';
+  Timer? _ringTimer;
 
   List<OrSpeedDial> get presets => List.unmodifiable(_presets);
-  String get sipHost => _sipHost;
-  String get sipUser => _sipUser;
   String get sipPrefix => _sipPrefix;
+  String get alsaDevice => _alsaDevice;
+  bool get hookActiveHigh => _hookActiveHigh;
   String get dialBuffer => _dialBuffer;
   OrCallState get callState => _callState;
   String get status => _status;
-  bool get sipReady => _sip.isAvailable;
+  bool get sipReady => _line.isAvailable;
   bool get canHangup =>
       _callState == OrCallState.dialing || _callState == OrCallState.inCall;
+  String get hookPinLabel => kPhoneHookPin.label;
+  String get ringPinLabel => kPhoneRingPin.label;
 
   Future<void> load() async {
-    await _sip.init();
     try {
       final prefs = await SharedPreferences.getInstance();
-      _sipHost = prefs.getString(_hostKey) ?? '';
-      _sipUser = prefs.getString(_userKey) ?? '';
-      _sipPass = prefs.getString(_passKey) ?? '';
       _sipPrefix = prefs.getString(_prefixKey) ?? '';
+      _alsaDevice = prefs.getString(_alsaKey) ?? '';
+      _hookActiveHigh = prefs.getBool(_hookHighKey) ?? true;
       for (var i = 0; i < 3; i++) {
         _presets[i].name =
             prefs.getString('$_presetNamePrefix$i') ?? _defaultNames[i];
@@ -65,10 +67,34 @@ class OrPhoneProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('OrPhone: load failed: $e');
     }
-    _status = _sip.isAvailable
-        ? 'Ready (${_sip.backend})'
-        : 'Install pjsua on this Radxa to place calls';
+    await _line.init(preferredAlsa: _alsaDevice);
+    if (_alsaDevice.isEmpty && _line.alsaDevice != null) {
+      _alsaDevice = _line.alsaDevice!;
+    }
+    _status = _line.isAvailable
+        ? 'Ready (${_line.backend})'
+        : 'GPIO ${kPhoneHookPin.label} + CM108 USB audio';
+    _ringTimer?.cancel();
+    _ringTimer = Timer.periodic(const Duration(milliseconds: 400), (_) {
+      _pollRing();
+    });
     notifyListeners();
+  }
+
+  Future<void> _pollRing() async {
+    if (_callState == OrCallState.dialing || _callState == OrCallState.inCall) {
+      return;
+    }
+    final ringing = await _line.isRinging();
+    if (ringing && _callState != OrCallState.ringing) {
+      _callState = OrCallState.ringing;
+      _status = 'Incoming — tap Call to answer';
+      notifyListeners();
+    } else if (!ringing && _callState == OrCallState.ringing) {
+      _callState = OrCallState.idle;
+      _status = 'Ready (${_line.backend})';
+      notifyListeners();
+    }
   }
 
   void appendDigit(String d) {
@@ -88,19 +114,27 @@ class OrPhoneProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setLine({
+    String prefix = '',
+    String? alsaDevice,
+    bool? hookActiveHigh,
+  }) async {
+    _sipPrefix = prefix.trim();
+    if (alsaDevice != null) _alsaDevice = alsaDevice.trim();
+    if (hookActiveHigh != null) _hookActiveHigh = hookActiveHigh;
+    await _line.init(preferredAlsa: _alsaDevice);
+    notifyListeners();
+    await _save();
+  }
+
+  /// Kept so older settings dialogs compile if any remain.
   Future<void> setSip({
     required String host,
     required String user,
     String? password,
     String prefix = '',
-  }) async {
-    _sipHost = host.trim();
-    _sipUser = user.trim();
-    if (password != null && password.isNotEmpty) _sipPass = password;
-    _sipPrefix = prefix.trim();
-    notifyListeners();
-    await _save();
-  }
+  }) =>
+      setLine(prefix: prefix);
 
   Future<void> setPreset(int index, {required String name, required String number}) async {
     if (index < 0 || index > 2) return;
@@ -120,14 +154,21 @@ class OrPhoneProvider extends ChangeNotifier {
 
   Future<void> dial(String number) async {
     final digits = number.replaceAll(RegExp(r'[^0-9*#+]'), '');
-    if (digits.isEmpty) {
-      _status = 'Enter a number';
+    if (digits.isEmpty && _callState == OrCallState.ringing) {
+      _callState = OrCallState.dialing;
+      _status = 'Answering…';
+      notifyListeners();
+      final ok = await _line.answer(
+        alsaDevice: _alsaDevice,
+        hookActiveHigh: _hookActiveHigh,
+      );
+      _callState = ok ? OrCallState.inCall : OrCallState.failed;
+      _status = ok ? 'In call' : 'Answer failed — check hook GPIO / CM108';
       notifyListeners();
       return;
     }
-    if (_sipHost.isEmpty) {
-      _status = 'Set SIP host in phone settings first (usually 127.0.0.1)';
-      _callState = OrCallState.failed;
+    if (digits.isEmpty) {
+      _status = 'Enter a number';
       notifyListeners();
       return;
     }
@@ -136,39 +177,41 @@ class OrPhoneProvider extends ChangeNotifier {
     _status = 'Calling $digits…';
     notifyListeners();
 
-    final ok = await _sip.dial(
+    final ok = await _line.dial(
       number: digits,
-      host: _sipHost,
-      user: _sipUser.isEmpty ? '100' : _sipUser,
-      password: _sipPass,
       prefix: _sipPrefix,
+      alsaDevice: _alsaDevice,
+      hookActiveHigh: _hookActiveHigh,
     );
     if (ok) {
       _callState = OrCallState.inCall;
       _status = 'In call · $digits';
     } else {
       _callState = OrCallState.failed;
-      _status = _sip.isAvailable
-          ? 'Call failed'
-          : 'No SIP client — install pjsua, then retry';
+      _status = 'Call failed — hook ${kPhoneHookPin.label}, CM108 USB';
     }
     notifyListeners();
   }
 
   Future<void> hangup() async {
-    await _sip.hangup();
+    await _line.hangup(hookActiveHigh: _hookActiveHigh);
     _callState = OrCallState.idle;
-    _status = _sip.isAvailable ? 'Ended' : _status;
+    _status = 'Ended';
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _ringTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _save() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_hostKey, _sipHost);
-      await prefs.setString(_userKey, _sipUser);
-      await prefs.setString(_passKey, _sipPass);
       await prefs.setString(_prefixKey, _sipPrefix);
+      await prefs.setString(_alsaKey, _alsaDevice);
+      await prefs.setBool(_hookHighKey, _hookActiveHigh);
       for (var i = 0; i < 3; i++) {
         await prefs.setString('$_presetNamePrefix$i', _presets[i].name);
         await prefs.setString('$_presetNumPrefix$i', _presets[i].number);
